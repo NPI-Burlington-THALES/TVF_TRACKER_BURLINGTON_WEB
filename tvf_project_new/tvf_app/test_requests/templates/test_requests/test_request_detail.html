@@ -1,0 +1,165 @@
+{# tvf_app/test_requests/templates/test_requests/test_request_detail.html #}
+{% extends 'base.html' %}
+
+{% block title %}TVF #{{ test_request.tvf_number }} Details{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        Test Request Details (TVF #{{ test_request.tvf_number }})
+        <div class="float-end">
+            <a href="{% url 'test_requests:update' pk=test_request.pk %}" class="btn btn-warning btn-sm me-2">Edit TVF</a>
+            <a href="{% url 'test_requests:pdf' pk=test_request.pk %}" class="btn btn-secondary btn-sm" target="_blank">Generate PDF</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>CR Number:</strong> {{ test_request.cr_number|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>TVF Name:</strong> {{ test_request.tvf_name }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Customer:</strong> {{ test_request.customer.name }}</div>
+            <div class="col-md-6"><strong>Project:</strong> {{ test_request.project.name }} ({{ test_request.project.tvf_environment.name }})</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Initiator:</strong> {{ test_request.tvf_initiator.username }}</div>
+            <div class="col-md-6"><strong>TVF Type:</strong> {{ test_request.tvf_type.name }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>PIN Mailer:</strong> {% if test_request.tvf_pin_mailer %}Yes{% else %}No{% endif %}</div>
+            <div class="col-md-6"><strong>Status:</strong> {{ test_request.status.name }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Current Phase:</strong> {{ test_request.current_phase.name|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>Date Created:</strong> {{ test_request.date_created|date:"Y-m-d H:i" }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Request Received:</strong> {{ test_request.request_received_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>Requested Ship Date:</strong> {{ test_request.request_ship_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Completed Date:</strong> {{ test_request.tvf_completed_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>Last Status Update:</strong> {{ test_request.last_status_update|date:"Y-m-d H:i" }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>S-Code:</strong> {{ test_request.s_code|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>D-Code:</strong> {{ test_request.d_code|default:"N/A" }}</div>
+        </div>
+        <div class="mb-3"><strong>Comments:</strong> {{ test_request.comments|default:"N/A" }}</div>
+        <div class="mb-3"><strong>Tester Comments:</strong> {{ test_request.tester_comments|default:"N/A" }}</div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Trustport Folder:</strong> {{ test_request.trustport_folder_actual|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>Pres Config Version:</strong> {{ test_request.pres_config_version|default:"N/A" }}</div>
+        </div>
+        <div class="row mb-3">
+            <div class="col-md-6"><strong>Proc Config Version:</strong> {{ test_request.proc_config_version|default:"N/A" }}</div>
+            <div class="col-md-6"><strong>PIN Config Version:</strong> {{ test_request.pin_config_version|default:"N/A" }}</div>
+        </div>
+
+        <hr>
+
+        <h4>Plastic Code Entries</h4>
+        {% if test_request.plastic_codes_entries.all %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>Plastic Code</th>
+                            <th>Quantity</th>
+                            <th>Thermal Colour</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in test_request.plastic_codes_entries.all %}
+                        <tr>
+                            <td>{{ entry.plastic_code_lookup.code }}</td>
+                            <td>{{ entry.quantity }}</td>
+                            <td>{{ entry.thermal_colour|default:"N/A" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No plastic code entries for this TVF.</p>
+        {% endif %}
+
+        <hr>
+
+        <h4>Input File Entries</h4>
+        {% if test_request.input_files_entries.all %}
+            {% for input_file in test_request.input_files_entries.all %}
+                <div class="card mb-3">
+                    <div class="card-header bg-light text-dark">
+                        File: {{ input_file.file_name|default:"N/A" }} (Received: {{ input_file.date_file_received|date:"Y-m-d H:i"|default:"N/A" }})
+                    </div>
+                    <div class="card-body">
+                        <h5>Cards</h5>
+                        <div class="row mb-2">
+                            <div class="col-md-4"><strong>CO:</strong> {{ input_file.card_co|default:"N/A" }}</div>
+                            <div class="col-md-4"><strong>WO:</strong> {{ input_file.card_wo|default:"N/A" }}</div>
+                            <div class="col-md-4"><strong>Qty:</strong> {{ input_file.card_qty }}</div>
+                        </div>
+                        <h5>PINs</h5>
+                        <div class="row mb-2">
+                            <div class="col-md-4"><strong>CO:</strong> {{ input_file.pin_co|default:"N/A" }}</div>
+                            <div class="col-md-4"><strong>WO:</strong> {{ input_file.pin_wo|default:"N/A" }}</div>
+                            <div class="col-md-4"><strong>Qty:</strong> {{ input_file.pin_qty }}</div>
+                        </div>
+
+                        {% if input_file.pans.all %}
+                            <h6>Associated PANs:</h6>
+                            <ul class="list-group list-group-flush">
+                                {% for pan in input_file.pans.all %}
+                                    <li class="list-group-item">{{ pan.pan_truncated }} ({% if pan.is_available %}Available{% else %}Not Available{% endif %})</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>No PANs associated with this input file.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No input file entries for this TVF.</p>
+        {% endif %}
+
+        <hr>
+
+        <h4>Quality Details</h4>
+        {% with quality=test_request.quality_details %}
+            {% if quality %}
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>Output in Accordance:</strong> {% if quality.output_accordance_request %}Yes{% else %}No{% endif %}</div>
+                    <div class="col-md-6"><strong>Checked Against Specs:</strong> {% if quality.checked_against_specifications %}Yes{% else %}No{% endif %}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>Quality Sign Off By:</strong> {{ quality.quality_sign_off_by.username|default:"N/A" }}</div>
+                    <div class="col-md-6"><strong>Quality Sign Off Date:</strong> {{ quality.quality_sign_off_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+                </div>
+            {% else %}
+                <p>No quality details available.</p>
+            {% endif %}
+        {% endwith %}
+
+        <hr>
+
+        <h4>Shipping Details</h4>
+        {% with shipping=test_request.shipping_details %}
+            {% if shipping %}
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>Dispatch Method:</strong> {{ shipping.dispatch_method.name|default:"N/A" }}</div>
+                    <div class="col-md-6"><strong>Shipping Sign Off By:</strong> {{ shipping.shipping_sign_off_by.username|default:"N/A" }}</div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6"><strong>Date Shipped:</strong> {{ shipping.date_shipped|date:"Y-m-d H:i"|default:"N/A" }}</div>
+                    <div class="col-md-6"><strong>Ship To Address:</strong> <pre>{{ shipping.ship_to_address|default:"N/A" }}</pre></div>
+                </div>
+            {% else %}
+                <p>No shipping details available.</p>
+            {% endif %}
+        {% endwith %}
+
+    </div>
+</div>
+{% endblock %}

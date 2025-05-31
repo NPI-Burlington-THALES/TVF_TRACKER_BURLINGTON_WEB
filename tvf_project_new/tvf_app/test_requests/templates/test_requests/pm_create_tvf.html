@@ -1,0 +1,1162 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load custom_filters %} {# <--- MAKE SURE THIS LINE IS PRESENT #}
+
+{% block title %}Create New TVF{% endblock %}
+
+{% block head %}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for form layout and spacing */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #4a5568; /* Tailwind gray-700 */
+        }
+        .form-control {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #4a5568;
+            background-color: #fff;
+            background-clip: padding-box;
+            border: 1px solid #e2e8f0; /* Tailwind gray-300 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        .form-control:focus {
+            border-color: #667eea; /* Tailwind indigo-500 */
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .form-check-input {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.25rem;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            cursor: pointer;
+        }
+        .form-check-input:checked {
+            background-color: #667eea;
+            border-color: #667eea;
+        }
+        .helptext {
+            font-size: 0.875rem;
+            color: #718096; /* Tailwind gray-600 */
+            margin-top: 0.25rem;
+        }
+        .errorlist {
+            color: #e53e3e; /* Tailwind red-600 */
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+            list-style: none;
+            padding-left: 0;
+        }
+        /* Style for top-level inline formset rows */
+        .inline-formset-row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.375rem;
+            background-color: #f7fafc;
+            flex-wrap: wrap;
+        }
+        .inline-formset-row .form-group {
+            flex: 1;
+            min-width: 180px;
+            margin-bottom: 0;
+        }
+        .delete-button {
+            background-color: #e53e3e;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .delete-button:hover {
+            background-color: #c53030;
+        }
+        .add-row-button {
+            background-color: #48bb78;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 1rem;
+        }
+        .add-row-button:hover {
+            background-color: #38a169;
+        }
+        /* Nested formset styles */
+        .nested-formset-container {
+            border-top: 1px solid #cbd5e0; /* Tailwind gray-400 */
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }
+        .nested-formset-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+            margin-bottom: 0.5rem;
+            padding: 0.75rem;
+            background-color: #edf2f7; /* Tailwind gray-200 */
+            border-radius: 0.25rem;
+            flex-wrap: wrap;
+        }
+        .nested-formset-row .form-group {
+            flex: 1;
+            min-width: 120px;
+            margin-bottom: 0;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Create New TVF <span class="text-indigo-600 text-xl">({{ role }})</span></h1>
+        
+        {% if messages %}
+            <div class="mb-4">
+                {% for message in messages %}
+                    <div class="p-3 rounded-md {% if message.tags == 'success' %}bg-green-100 text-green-800{% elif message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <form method="post" class="bg-white p-8 rounded-lg shadow-md space-y-6">
+            {% csrf_token %}
+
+            {# Main TestRequest Form Fields #}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {# TVF Number (Auto-populated, Read-only) #}
+                <div class="form-group">
+                    <label for="{{ form.trustport_folder_actual.id_for_label }}" class="form-label">{{ form.trustport_folder_actual.label }}:</label>
+                    {{ form.trustport_folder_actual }} {# JS will populate this select #}
+                    {% if form.trustport_folder_actual.help_text %}<p class="helptext">{{ form.trustport_folder_actual.help_text }}</p>{% endif %}
+                    {% if form.trustport_folder_actual.errors %}<ul class="errorlist">{{ form.trustport_folder_actual.errors }}</ul>{% endif %}
+                </div>
+
+                {# CR Number #}
+                <div class="form-group">
+                    <label for="{{ form.cr_number.id_for_label }}" class="form-label">{{ form.cr_number.label }}:</label>
+                    {{ form.cr_number }}
+                    {% if form.cr_number.help_text %}<p class="helptext">{{ form.cr_number.help_text }}</p>{% endif %}
+                    {% if form.cr_number.errors %}<ul class="errorlist">{{ form.cr_number.errors }}</ul>{% endif %}
+                </div>
+                
+                {# TVF Name #}
+                <div class="form-group">
+                    <label for="{{ form.tvf_name.id_for_label }}" class="form-label">{{ form.tvf_name.label }}:</label>
+                    {{ form.tvf_name }}
+                    {% if form.tvf_name.help_text %}<p class="helptext">{{ form.tvf_name.help_text }}</p>{% endif %}
+                    {% if form.tvf_name.errors %}<ul class="errorlist">{{ form.tvf_name.errors }}</ul>{% endif %}
+                </div>
+
+                {# Customer #}
+                <div class="form-group">
+                    <label for="{{ form.customer.id_for_label }}" class="form-label">{{ form.customer.label }}:</label>
+                    {{ form.customer }}
+                    {% if form.customer.help_text %}<p class="helptext">{{ form.customer.help_text }}</p>{% endif %}
+                    {% if form.customer.errors %}<ul class="errorlist">{{ form.customer.errors }}</ul>{% endif %}
+                </div>
+
+                {# TVF Environment #}
+                <div class="form-group">
+                    <label for="{{ form.tvf_environment.id_for_label }}" class="form-label">{{ form.tvf_environment.label }}:</label>
+                    {{ form.tvf_environment }}
+                    {% if form.tvf_environment.help_text %}<p class="helptext">{{ form.tvf_environment.help_text }}</p>{% endif %}
+                    {% if form.tvf_environment.errors %}<ul class="errorlist">{{ form.tvf_environment.errors }}</ul>{% endif %}
+                </div>
+
+                {# Project Name (Dynamic based on Customer and Environment) #}
+                <div class="form-group">
+                    <label for="{{ form.project.id_for_label }}" class="form-label">{{ form.project.label }}:</label>
+                    {{ form.project }}
+                    {% if form.project.help_text %}<p class="helptext">{{ form.project.help_text }}</p>{% endif %}
+                    {% if form.project.errors %}<ul class="errorlist">{{ form.project.errors }}</ul>{% endif %}
+                </div>
+
+                {# TVF Initiator (Pre-filled with current user, not editable) #}
+                <div class="form-group">
+                    <label class="form-label">TVF Initiator:</label>
+                    <input type="text" class="form-control bg-gray-100 cursor-not-allowed" value="{{ request.user.get_full_name|default:request.user.username }}" disabled>
+                    <p class="helptext">Automatically set to the logged-in user.</p>
+                </div>
+
+                {# TVF Type #}
+                <div class="form-group">
+                    <label for="{{ form.tvf_type.id_for_label }}" class="form-label">{{ form.tvf_type.label }}:</label>
+                    {{ form.tvf_type }}
+                    {% if form.tvf_type.help_text %}<p class="helptext">{{ form.tvf_type.help_text }}</p>{% endif %}
+                    {% if form.tvf_type.errors %}<ul class="errorlist">{{ form.tvf_type.errors }}</ul>{% endif %}
+                </div>
+
+                {# TVF PIN Mailer #}
+                <div class="form-group flex items-center mt-6">
+                    {{ form.tvf_pin_mailer }}
+                    <label for="{{ form.tvf_pin_mailer.id_for_label }}" class="form-label !mb-0 ml-2">{{ form.tvf_pin_mailer.label }}</label>
+                    {% if form.tvf_pin_mailer.help_text %}<p class="helptext">{{ form.tvf_pin_mailer.help_text }}</p>{% endif %}
+                    {% if form.tvf_pin_mailer.errors %}<ul class="errorlist">{{ form.tvf_pin_mailer.errors }}</ul>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Dates</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {# Request Received Date (Pre-filled with current time) #}
+                <div class="form-group">
+                    <label for="{{ form.request_received_date.id_for_label }}" class="form-label">{{ form.request_received_date.label }}:</label>
+                    {{ form.request_received_date }}
+                    {% if form.request_received_date.help_text %}<p class="helptext">{{ form.request_received_date.help_text }}</p>{% endif %}
+                    {% if form.request_received_date.errors %}<ul class="errorlist">{{ form.request_received_date.errors }}</ul>{% endif %}
+                </div>
+
+                {# Request Ship Date (Calculated based on SLA) #}
+                <div class="form-group">
+                    <label for="{{ form.request_ship_date.id_for_label }}" class="form-label">{{ form.request_ship_date.label }}:</label>
+                    {{ form.request_ship_date }}
+                    {% if form.request_ship_date.help_text %}<p class="helptext">{{ form.request_ship_date.help_text }}</p>{% endif %}
+                    {% if form.request_ship_date.errors %}<ul class="errorlist">{{ form.request_ship_date.errors }}</ul>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Codes & Comments</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {# S-Code #}
+                <div class="form-group">
+                    <label for="{{ form.s_code.id_for_label }}" class="form-label">{{ form.s_code.label }}:</label>
+                    {{ form.s_code }}
+                    {% if form.s_code.help_text %}<p class="helptext">{{ form.s_code.help_text }}</p>{% endif %}
+                    {% if form.s_code.errors %}<ul class="errorlist">{{ form.s_code.errors }}</ul>{% endif %}
+                </div>
+
+                {# D-Code #}
+                <div class="form-group">
+                    <label for="{{ form.d_code.id_for_label }}" class="form-label">{{ form.d_code.label }}:</label>
+                    {{ form.d_code }}
+                    {% if form.d_code.help_text %}<p class="helptext">{{ form.d_code.help_text }}</p>{% endif %}
+                    {% if form.d_code.errors %}<ul class="errorlist">{{ form.d_code.errors }}</ul>{% endif %}
+                </div>
+
+                {# Comments #}
+                <div class="form-group md:col-span-2">
+                    <label for="{{ form.comments.id_for_label }}" class="form-label">{{ form.comments.label }}:</label>
+                    {{ form.comments }}
+                    {% if form.comments.help_text %}<p class="helptext">{{ form.comments.help_text }}</p>{% endif %}
+                    {% if form.comments.errors %}<ul class="errorlist">{{ form.comments.errors }}</ul>{% endif %}
+                </div>
+            </div>
+
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Configuration Versions</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {# Trustport Folder (Dynamic based on Customer/Project) #}
+                <div class="form-group">
+                    <label for="{{ form.trustport_folder_actual.id_for_label }}" class="form-label">{{ form.trustport_folder_actual.label }}:</label>
+                    {{ form.trustport_folder_actual }}
+                    {% if form.trustport_folder_actual.help_text %}<p class="helptext">{{ form.trustport_folder_actual.help_text }}</p>{% endif %}
+                    {% if form.trustport_folder_actual.errors %}<ul class="errorlist">{{ form.trustport_folder_actual.errors }}</ul>{% endif %}
+                </div>
+
+                {# Pres Config Version #}
+                <div class="form-group">
+                    <label for="{{ form.pres_config_version.id_for_label }}" class="form-label">{{ form.pres_config_version.label }}:</label>
+                    {{ form.pres_config_version }}
+                    {% if form.pres_config_version.help_text %}<p class="helptext">{{ form.pres_config_version.help_text }}</p>{% endif %}
+                    {% if form.pres_config_version.errors %}<ul class="errorlist">{{ form.pres_config_version.errors }}</ul>{% endif %}
+                </div>
+
+                {# Proc Config Version #}
+                <div class="form-group">
+                    <label for="{{ form.proc_config_version.id_for_label }}" class="form-label">{{ form.proc_config_version.label }}:</label>
+                    {{ form.proc_config_version }}
+                    {% if form.proc_config_version.help_text %}<p class="helptext">{{ form.proc_config_version.help_text }}</p>{% endif %}
+                    {% if form.proc_config_version.errors %}<ul class="errorlist">{{ form.proc_config_version.errors }}</ul>{% endif %}
+                </div>
+
+                {# PIN Config Version #}
+                <div class="form-group">
+                    <label for="{{ form.pin_config_version.id_for_label }}" class="form-label">{{ form.pin_config_version.label }}:</label>
+                    {{ form.pin_config_version }}
+                    {% if form.pin_config_version.help_text %}<p class="helptext">{{ form.pin_config_version.help_text }}</p>{% endif %}
+                    {% if form.pin_config_version.errors %}<ul class="errorlist">{{ form.pin_config_version.errors }}</ul>{% endif %}
+                </div>
+            </div>
+
+            You're right to want to get these dynamic dropdowns working smoothly! The "Trustport Folder" and "Plastic Codes" not populating correctly is usually an issue with how the JavaScript on the page interacts with your Django views that supply the data, or how the views themselves filter that data.
+
+            I can't directly "sync" with a GitHub repo, but I have the versions of the files (models.py, forms.py, views.py, pm_create_tvf.html) we've been working on. Let's refine these.
+            
+            The SQL INSERT statements you provided confirm that data exists in test_requests_plasticcodelookup for customer_id=15, project_id=2, and tvf_environment_id=1. This is good because it gives us a concrete case to test against.
+            
+            The core requirement: "for a given customer and project and tvf environment it should pull up the data already in the database for that plasticcode."
+            
+            Diagnosis & Fixes:
+            
+            1. Plastic Codes - AJAX View (views.py)
+            
+            Your PlasticCodeLookup model links plastic codes to customer, project, AND tvf_environment. However, the AJAX view get_filtered_plastic_codes in your test_requests/views.py was likely filtering only by customer and project. It needs to include the environment.
+            
+            Action for test_requests/views.py:
+            Update the get_filtered_plastic_codes function:
+            Python
+            
+            # tvf_app/test_requests/views.py
+            # ... (other imports and views)
+            
+            @login_required
+            def get_filtered_plastic_codes(request):
+                customer_id = request.GET.get('customer_id')
+                project_id = request.GET.get('project_id')
+                environment_id = request.GET.get('environment_id') # Get the environment ID
+            
+                plastic_codes = []
+                if customer_id and project_id and environment_id: # Ensure all three are provided
+                    plastic_codes_query = PlasticCodeLookup.objects.filter(
+                        customer_id=customer_id,
+                        project_id=project_id,
+                        tvf_environment_id=environment_id # Filter by environment
+                    ).values('id', 'code').order_by('code')
+                    plastic_codes = list(plastic_codes_query)
+                return JsonResponse({'plastic_codes': plastic_codes})
+            
+            # ... (other views, ensure get_filtered_projects and get_filtered_trustport_folders are as they were or correct)
+            
+            2. Plastic Codes & Trustport Folder - JavaScript in Template (pm_create_tvf.html)
+            
+            The JavaScript in your pm_create_tvf.html template needs to:
+            
+                Send customer_id, project_id, AND environment_id to the get_filtered_plastic_codes AJAX endpoint.
+                Ensure the "Trustport Folder" dropdown is correctly populated when Customer and Project change.
+            
+            Action for test_requests/templates/test_requests/pm_create_tvf.html:
+            Locate the JavaScript section (usually at the bottom, within <script> tags).
+            
+            Modify the AJAX calls for populating project-dependent fields. Pay special attention to updateAllPlasticCodeOptions (or the function that handles populating plastic code dropdowns in both the main plastic code section and within the PAN entries if you've implemented that part).
+            
+            Here's how you can adjust the relevant JavaScript. Note that environmentSelect should already be defined in your script as it's used for project filtering.
+            HTML
+            
+            {# tvf_app/test_requests/templates/test_requests/pm_create_tvf.html #}
+            {# ... (rest of your template HTML) ... #}
+            
+            {% block extra_js %} {# Or wherever your main script block is #}
+            <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+            <script>
+                $(document).ready(function() {
+                    const customerSelect = $('#id_customer');
+                    const environmentSelect = $('#id_tvf_environment'); // Should be the ID of your TVF Environment select
+                    const projectSelect = $('#id_project');
+                    const trustportFolderSelect = $('#id_trustport_folder_actual'); // Main form's Trustport Folder
+                    
+                    // For Plastic Codes in the main TestRequestPlasticCodeFormSet
+                    const plasticCodeFormsetContainer = $('#plastic-code-formset-container');
+            
+                    // For Plastic Codes within each PAN form (if you have them)
+                    // You might need to adjust the selector if you have multiple PAN forms.
+                    // This targets any select with the class 'pan-plastic-code-lookup'
+                    // which we added in forms.py for TestRequestPANForm.
+                    function getPanPlasticCodeSelects() {
+                        return $('select.pan-plastic-code-lookup');
+                    }
+            
+                    function updateProjectOptions() {
+                        const customerId = customerSelect.val();
+                        const environmentId = environmentSelect.val();
+                        projectSelect.empty().append($('<option></option>').attr('value', '').text('Select Project')); // Clear first
+                        
+                        if (customerId && environmentId) {
+                            $.ajax({
+                                url: '{% url "test_requests:get_filtered_projects" %}', // Make sure this URL name is correct
+                                data: {
+                                    'customer_id': customerId,
+                                    'environment_id': environmentId
+                                },
+                                success: function(data) {
+                                    projectSelect.append($('<option></option>').attr('value', '').text('Select Project'));
+                                    $.each(data.projects, function(key, value) {
+                                        projectSelect.append($('<option></option>').attr('value', value.id).text(value.name));
+                                    });
+                                    projectSelect.val("{{ form.project.value|default:'' }}"); // Restore selection if any
+                                    projectSelect.change(); // Trigger change to update dependents like Trustport folder
+                                }
+                            });
+                        } else {
+                             projectSelect.change(); // Still trigger to clear dependents
+                        }
+                    }
+            
+                    function updateDependentOnProjectOptions() {
+                        const customerId = customerSelect.val();
+                        const projectId = projectSelect.val();
+                        const environmentId = environmentSelect.val(); // Also needed for plastic codes
+            
+                        // Update Trustport Folders
+                        trustportFolderSelect.empty().append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+                        if (customerId && projectId) {
+                            $.ajax({
+                                url: '{% url "test_requests:get_filtered_trustport_folders" %}', // Make sure this URL name is correct
+                                data: { 'customer_id': customerId, 'project_id': projectId },
+                                success: function(data) {
+                                    trustportFolderSelect.append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+                                    $.each(data.folders, function(key, value) {
+                                        trustportFolderSelect.append($('<option></option>').attr('value', value.id).text(value.folder_path));
+                                    });
+                                    trustportFolderSelect.val("{{ form.trustport_folder_actual.value|default:'' }}"); // Restore
+                                }
+                            });
+                        }
+            
+                        // Update All Plastic Code Dropdowns (main section and PANs section)
+                        updateAllPlasticCodeDropdowns(customerId, projectId, environmentId);
+                    }
+            
+                    function updateAllPlasticCodeDropdowns(customerId, projectId, environmentId) {
+                        const selectsToUpdate = plasticCodeFormsetContainer.find('select[id$="-plastic_code_lookup"]')
+                                                  .add(getPanPlasticCodeSelects()); // Combine both sets of selects
+            
+                        selectsToUpdate.each(function() {
+                            const currentSelect = $(this);
+                            const selectedValue = currentSelect.val(); // Preserve selected value if possible
+                            currentSelect.empty().append($('<option value=""></option>').text('Select Plastic Code'));
+                            
+                            if (customerId && projectId && environmentId) {
+                                $.ajax({
+                                    url: '{% url "test_requests:get_filtered_plastic_codes" %}',
+                                    data: {
+                                        'customer_id': customerId,
+                                        'project_id': projectId,
+                                        'environment_id': environmentId // Send environment ID
+                                    },
+                                    success: function(data) {
+                                        $.each(data.plastic_codes, function(key, value) {
+                                            currentSelect.append($('<option></option>').attr('value', value.id).text(value.code));
+                                        });
+                                        if (selectedValue) { // Try to restore previous selection
+                                            currentSelect.val(selectedValue);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+            
+                    // Event listeners
+                    customerSelect.change(updateProjectOptions);
+                    environmentSelect.change(updateProjectOptions); // Environment change also triggers project update
+                    projectSelect.change(updateDependentOnProjectOptions); // Project change triggers its dependents
+            
+                    // Initial load - trigger updates if values are pre-filled (e.g., on form error re-render)
+                    if (customerSelect.val() && environmentSelect.val()) {
+                        updateProjectOptions(); 
+                        // updateDependentOnProjectOptions will be triggered by projectSelect.change() if project gets a value
+                    } else {
+                         updateDependentOnProjectOptions(); // Clear dependents if no customer/env/project
+                    }
+                    
+                    // Dynamic formset add/delete logic should re-trigger plastic code population for new rows if needed.
+                    // For example, when a new plastic code row is added to the main section:
+                    // $('#add-plastic-code-button-id').click(function() {
+                    //     ... logic to add new form ...
+                    //     const newSelect = newRow.find('select[id$="-plastic_code_lookup"]');
+                    //     updateSinglePlasticCodeDropdown(newSelect, customerSelect.val(), projectSelect.val(), environmentSelect.val());
+                    // });
+                    // Similar logic for new PAN rows that contain a plastic code select.
+                    // The updateAllPlasticCodeDropdowns called on C/P/E change should handle existing ones.
+            
+                });
+                // ... (your existing formset add/delete row JavaScript) ...
+            </script>
+            {% endblock %}
+            
+            Explanation of JavaScript Changes:
+            
+                updateProjectOptions: Now clears the project select first before populating. It also explicitly triggers .change() on projectSelect after populating to ensure updateDependentOnProjectOptions runs.
+                updateDependentOnProjectOptions: This function now calls updateAllPlasticCodeDropdowns and also handles clearing/populating the Trustport Folder.
+                updateAllPlasticCodeDropdowns:
+                    Takes customerId, projectId, and crucially environmentId as arguments.
+                    It finds all relevant plastic code select dropdowns (both in the main plastic code formset and any within PAN forms using the class pan-plastic-code-lookup).
+                    It clears and repopulates them by calling the get_filtered_plastic_codes AJAX endpoint, now correctly passing all three IDs.
+                Event Triggers: Changing Customer or Environment re-fetches Projects. Changing Project re-fetches Trustport Folders and all Plastic Code dropdowns.
+                Initial Load: Logic is included to attempt to populate dropdowns if the main Customer, Environment, and Project fields have initial values (e.g., when the form is re-rendered after a validation error).
+            
+            3. Redoing HTML "From Scratch" (Conceptual Structure)
+            
+            You mentioned wanting to change the HTML. Here's a conceptual structure using utility classes (like Tailwind CSS, which you have in your pm_create_tvf.html) for the "Plastic Codes" and "Trustport Folder" sections within your form.
+            
+            Trustport Folder (Part of the main form {{ form }}):
+            Ensure trustport_folder_actual is rendered like other fields in your main form's grid. The JS above will populate it.
+            HTML
+            
+            {# Inside your main form's grid, where appropriate #}
+            <div class="form-group">
+                <label for="{{ form.trustport_folder_actual.id_for_label }}" class="form-label">{{ form.trustport_folder_actual.label }}:</label>
+                {{ form.trustport_folder_actual }} {# JS will populate this select #}
+                {% if form.trustport_folder_actual.help_text %}<p class="helptext">{{ form.trustport_folder_actual.help_text }}</p>{% endif %}
+                {% if form.trustport_folder_actual.errors %}<ul class="errorlist">{{ form.trustport_folder_actual.errors }}</ul>{% endif %}
+            </div>
+            
+            Plastic Codes Section (Formset - {{ plastic_formset }}):
+            HTML
+            
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Plastic Codes</h2>
+            <div id="plastic-code-formset-container">
+                {{ plastic_formset.management_form }}
+                {% for formset_form in plastic_formset %}
+                    <div class="inline-formset-row p-4 border rounded mb-4 bg-gray-50" id="plastic_code_row_{{ forloop.counter0 }}">
+                        {% for hidden_field in formset_form.hidden_fields %}{{ hidden_field }}{% endfor %}
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            {# Plastic Code Lookup #}
+                            <div class="form-group">
+                                <label for="{{ formset_form.plastic_code_lookup.id_for_label }}" class="form-label">{{ formset_form.plastic_code_lookup.label }}</label>
+                                {{ formset_form.plastic_code_lookup }} {# JS populates this based on main C/P/E #}
+                                {% if formset_form.plastic_code_lookup.errors %}<ul class="errorlist">{{ formset_form.plastic_code_lookup.errors }}</ul>{% endif %}
+                            </div>
+            
+                            {# Manual Plastic Code #}
+                            <div class="form-group">
+                                <label for="{{ formset_form.manual_plastic_code.id_for_label }}" class="form-label">{{ formset_form.manual_plastic_code.label }}</label>
+                                {{ formset_form.manual_plastic_code }}
+                                {% if formset_form.manual_plastic_code.errors %}<ul class="errorlist">{{ formset_form.manual_plastic_code.errors }}</ul>{% endif %}
+                            </div>
+            
+                            {# Quantity #}
+                            <div class="form-group">
+                                <label for="{{ formset_form.quantity.id_for_label }}" class="form-label">{{ formset_form.quantity.label }}</label>
+                                {{ formset_form.quantity }}
+                                {% if formset_form.quantity.errors %}<ul class="errorlist">{{ formset_form.quantity.errors }}</ul>{% endif %}
+                            </div>
+                        </div>
+                        <div class="mt-2 text-right">
+                            {% if formset_form.instance.pk or formset_form.has_changed %} {# Show delete for existing/modified forms #}
+                                <button type="button" class="delete-row-button text-red-500 hover:text-red-700 font-semibold" 
+                                        onclick="deleteFormsetRow(this, '{{ plastic_formset.prefix }}')">
+                                    Delete Plastic Code
+                                </button>
+                                {% if formset_form.DELETE %}{{ formset_form.DELETE }}{% endif %} {# Hidden delete checkbox #}
+                            {% endif %}
+                        </div>
+                         {% if formset_form.non_field_errors %}<div class="errorlist non-field-errors">{{ formset_form.non_field_errors }}</div>{% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="button" class="add-row-button mt-4 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                    onclick="addFormsetRow('{{ plastic_formset.prefix }}', '#plastic-code-formset-container', '#empty-plastic-code-form')">
+                Add Another Plastic Code
+            </button>
+            
+            {# Template for empty plastic code form (for JavaScript) - ensure it's hidden #}
+            <template id="empty-plastic-code-form">
+                <div class="inline-formset-row p-4 border rounded mb-4 bg-gray-50">
+                    {% for hidden_field in plastic_formset.empty_form.hidden_fields %}{{ hidden_field }}{% endfor %}
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div class="form-group">
+                            <label for="{{ plastic_formset.empty_form.plastic_code_lookup.id_for_label }}" class="form-label">{{ plastic_formset.empty_form.plastic_code_lookup.label }}</label>
+                            {{ plastic_formset.empty_form.plastic_code_lookup }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ plastic_formset.empty_form.manual_plastic_code.id_for_label }}" class="form-label">{{ plastic_formset.empty_form.manual_plastic_code.label }}</label>
+                            {{ plastic_formset.empty_form.manual_plastic_code }}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ plastic_formset.empty_form.quantity.id_for_label }}" class="form-label">{{ plastic_formset.empty_form.quantity.label }}</label>
+                            {{ plastic_formset.empty_form.quantity }}
+                        </div>
+                    </div>
+                    <div class="mt-2 text-right">
+                        <button type="button" class="delete-row-button text-red-500 hover:text-red-700 font-semibold"
+                                onclick="deleteFormsetRow(this, '{{ plastic_formset.prefix }}')">
+                            Delete Plastic Code
+                        </button>
+                        {% if plastic_formset.empty_form.DELETE %}{{ plastic_formset.empty_form.DELETE }}{% endif %} {# Include hidden delete for new rows too #}
+                    </div>
+                </div>
+            </template>
+            <button type="button" class="add-row-button" onclick="addFormsetRow('plastic-code')">Add Another Plastic Code</button>
+
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Input Files & Workorders</h2>
+            <div id="input-file-formset-container">
+                {{ input_file_formset.management_form }}
+                {% for input_file_form in input_file_formset %}
+                    <div class="inline-formset-row" {% if input_file_form.DELETE %}style="display:none;"{% endif %}>
+                        {% for hidden in input_file_form.hidden_fields %}{{ hidden }}{% endfor %}
+                        <div class="form-group">
+                            <label for="{{ input_file_form.file_name.id_for_label }}" class="form-label">{{ input_file_form.file_name.label }}:</label>
+                            {{ input_file_form.file_name }}
+                            {% if input_file_form.file_name.help_text %}<p class="helptext">{{ input_file_form.file_name.help_text }}</p>{% endif %}
+                            {% if input_file_form.file_name.errors %}<ul class="errorlist">{{ input_file_form.file_name.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.date_file_received.id_for_label }}" class="form-label">{{ input_file_form.date_file_received.label }}:</label>
+                            {{ input_file_form.date_file_received }}
+                            {% if input_file_form.date_file_received.help_text %}<p class="helptext">{{ input_file_form.date_file_received.help_text }}</p>{% endif %}
+                            {% if input_file_form.date_file_received.errors %}<ul class="errorlist">{{ input_file_form.date_file_received.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.card_co.id_for_label }}" class="form-label">{{ input_file_form.card_co.label }}:</label>
+                            {{ input_file_form.card_co }}
+                            {% if input_file_form.card_co.help_text %}<p class="helptext">{{ input_file_form.card_co.help_text }}</p>{% endif %}
+                            {% if input_file_form.card_co.errors %}<ul class="errorlist">{{ input_file_form.card_co.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.card_wo.id_for_label }}" class="form-label">{{ input_file_form.card_wo.label }}:</label>
+                            {{ input_file_form.card_wo }}
+                            {% if input_file_form.card_wo.help_text %}<p class="helptext">{{ input_file_form.card_wo.help_text }}</p>{% endif %}
+                            {% if input_file_form.card_wo.errors %}<ul class="errorlist">{{ input_file_form.card_wo.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.card_qty.id_for_label }}" class="form-label">{{ input_file_form.card_qty.label }}:</label>
+                            {{ input_file_form.card_qty }}
+                            {% if input_file_form.card_qty.help_text %}<p class="helptext">{{ input_file_form.card_qty.help_text }}</p>{% endif %}
+                            {% if input_file_form.card_qty.errors %}<ul class="errorlist">{{ input_file_form.card_qty.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.pin_co.id_for_label }}" class="form-label">{{ input_file_form.pin_co.label }}:</label>
+                            {{ input_file_form.pin_co }}
+                            {% if input_file_form.pin_co.help_text %}<p class="helptext">{{ input_file_form.pin_co.help_text }}</p>{% endif %}
+                            {% if input_file_form.pin_co.errors %}<ul class="errorlist">{{ input_file_form.pin_co.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.pin_wo.id_for_label }}" class="form-label">{{ input_file_form.pin_wo.label }}:</label>
+                            {{ input_file_form.pin_wo }}
+                            {% if input_file_form.pin_wo.help_text %}<p class="helptext">{{ input_file_form.pin_wo.help_text }}</p>{% endif %}
+                            {% if input_file_form.pin_wo.errors %}<ul class="errorlist">{{ input_file_form.pin_wo.errors }}</ul>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ input_file_form.pin_qty.id_for_label }}" class="form-label">{{ input_file_form.pin_qty.label }}:</label>
+                            {{ input_file_form.pin_qty }}
+                            {% if input_file_form.pin_qty.help_text %}<p class="helptext">{{ input_file_form.pin_qty.help_text }}</p>{% endif %}
+                            {% if input_file_form.pin_qty.errors %}<ul class="errorlist">{{ input_file_form.pin_qty.errors }}</ul>{% endif %}
+                        </div>
+                        {% if input_file_form.DELETE %}
+                            <input type="checkbox" name="{{ input_file_form.DELETE.html_name }}" id="{{ input_file_form.DELETE.id_for_label }}" class="hidden">
+                        {% else %}
+                            <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete Input File</button>
+                        {% endif %}
+
+                        {# Nested PAN Formset for this Input File #}
+                        <div class="nested-formset-container w-full">
+                            <h3 class="text-xl font-semibold text-gray-600 mb-3">PANs for {{ input_file_form.instance.file_name|default:"New File" }}</h3>
+                            {# Find the correct nested formset for this input_file_form #}
+                            {% with pan_formset=pans_formsets|get_item:forloop.counter0 %}
+                                {{ pan_formset.management_form }}
+                                {% for pan_form in pan_formset %}
+                                    <div class="nested-formset-row" {% if pan_form.DELETE %}style="display:none;"{% endif %}>
+                                        {% for hidden in pan_form.hidden_fields %}{{ hidden }}{% endfor %}
+                                        <div class="form-group">
+                                            <label for="{{ pan_form.pan_truncated.id_for_label }}" class="form-label">{{ pan_form.pan_truncated.label }}:</label>
+                                            {{ pan_form.pan_truncated }}
+                                            {% if pan_form.pan_truncated.help_text %}<p class="helptext">{{ pan_form.pan_truncated.help_text }}</p>{% endif %}
+                                            {% if pan_form.pan_truncated.errors %}<ul class="errorlist">{{ pan_form.pan_truncated.errors }}</ul>{% endif %}
+                                        </div>
+                                        <div class="form-group flex items-center">
+                                            {{ pan_form.is_available }}
+                                            <label for="{{ pan_form.is_available.id_for_label }}" class="form-label !mb-0 ml-2">{{ pan_form.is_available.label }}</label>
+                                            {% if pan_form.is_available.help_text %}<p class="helptext">{{ pan_form.is_available.help_text }}</p>{% endif %}
+                                            {% if pan_form.is_available.errors %}<ul class="errorlist">{{ pan_form.is_available.errors }}</ul>{% endif %}
+                                        </div>
+                                        {% if pan_form.DELETE %}
+                                            <input type="checkbox" name="{{ pan_form.DELETE.html_name }}" id="{{ pan_form.DELETE.id_for_label }}" class="hidden">
+                                        {% else %}
+                                            <button type="button" class="delete-button" onclick="deleteNestedFormsetRow(this)">Delete PAN</button>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                                <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600" 
+                                    onclick="addNestedFormsetRow(this, 'input_files-{{ forloop.counter0 }}-pans')">Add Another PAN</button>
+                            {% endwith %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="button" class="add-row-button" onclick="addFormsetRow('input-file')">Add Another Input File</button>
+
+
+            {# Shipping Details #}
+            <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Shipping Details</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="form-group">
+                    <label for="{{ shipping_form.dispatch_method.id_for_label }}" class="form-label">{{ shipping_form.dispatch_method.label }}:</label>
+                    {{ shipping_form.dispatch_method }}
+                    {% if shipping_form.dispatch_method.help_text %}<p class="helptext">{{ shipping_form.dispatch_method.help_text }}</p>{% endif %}
+                    {% if shipping_form.dispatch_method.errors %}<ul class="errorlist">{{ shipping_form.dispatch_method.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_name.id_for_label }}" class="form-label">{{ shipping_form.ship_to_name.label }}:</label>
+                    {{ shipping_form.ship_to_name }}
+                    {% if shipping_form.ship_to_name.help_text %}<p class="helptext">{{ shipping_form.ship_to_name.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_name.errors %}<ul class="errorlist">{{ shipping_form.ship_to_name.errors }}</ul>{% endif %}
+                </div>
+                 <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_business_name.id_for_label }}" class="form-label">{{ shipping_form.ship_to_business_name.label }}:</label>
+                    {{ shipping_form.ship_to_business_name }}
+                    {% if shipping_form.ship_to_business_name.help_text %}<p class="helptext">{{ shipping_form.ship_to_business_name.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_business_name.errors %}<ul class="errorlist">{{ shipping_form.ship_to_business_name.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_address_1.id_for_label }}" class="form-label">{{ shipping_form.ship_to_address_1.label }}:</label>
+                    {{ shipping_form.ship_to_address_1 }}
+                    {% if shipping_form.ship_to_address_1.help_text %}<p class="helptext">{{ shipping_form.ship_to_address_1.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_address_1.errors %}<ul class="errorlist">{{ shipping_form.ship_to_address_1.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_address_2.id_for_label }}" class="form-label">{{ shipping_form.ship_to_address_2.label }}:</label>
+                    {{ shipping_form.ship_to_address_2 }}
+                    {% if shipping_form.ship_to_address_2.help_text %}<p class="helptext">{{ shipping_form.ship_to_address_2.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_address_2.errors %}<ul class="errorlist">{{ shipping_form.ship_to_address_2.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_address_3.id_for_label }}" class="form-label">{{ shipping_form.ship_to_address_3.label }}:</label>
+                    {{ shipping_form.ship_to_address_3 }}
+                    {% if shipping_form.ship_to_address_3.help_text %}<p class="helptext">{{ shipping_form.ship_to_address_3.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_address_3.errors %}<ul class="errorlist">{{ shipping_form.ship_to_address_3.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_city.id_for_label }}" class="form-label">{{ shipping_form.ship_to_city.label }}:</label>
+                    {{ shipping_form.ship_to_city }}
+                    {% if shipping_form.ship_to_city.help_text %}<p class="helptext">{{ shipping_form.ship_to_city.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_city.errors %}<ul class="errorlist">{{ shipping_form.ship_to_city.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_state_province.id_for_label }}" class="form-label">{{ shipping_form.ship_to_state_province.label }}:</label>
+                    {{ shipping_form.ship_to_state_province }}
+                    {% if shipping_form.ship_to_state_province.help_text %}<p class="helptext">{{ shipping_form.ship_to_state_province.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_state_province.errors %}<ul class="errorlist">{{ shipping_form.ship_to_state_province.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_postal_code.id_for_label }}" class="form-label">{{ shipping_form.ship_to_postal_code.label }}:</label>
+                    {{ shipping_form.ship_to_postal_code }}
+                    {% if shipping_form.ship_to_postal_code.help_text %}<p class="helptext">{{ shipping_form.ship_to_postal_code.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_postal_code.errors %}<ul class="errorlist">{{ shipping_form.ship_to_postal_code.errors }}</ul>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ shipping_form.ship_to_country.id_for_label }}" class="form-label">{{ shipping_form.ship_to_country.label }}:</label>
+                    {{ shipping_form.ship_to_country }}
+                    {% if shipping_form.ship_to_country.help_text %}<p class="helptext">{{ shipping_form.ship_to_country.help_text }}</p>{% endif %}
+                    {% if shipping_form.ship_to_country.errors %}<ul class="errorlist">{{ shipping_form.ship_to_country.errors }}</ul>{% endif %}
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-4">
+                <button type="submit" name="action" value="save_draft" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out">
+                    Save Draft
+                </button>
+                <button type="submit" name="action" value="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition duration-300 ease-in-out">
+                    Submit TVF to NPI
+                </button>
+            </div>
+        </form>
+        
+        <div class="mt-8 text-center">
+            <a href="{% url 'test_requests:coach_dashboard' %}" class="text-indigo-600 hover:text-indigo-800">Back to Dashboard</a>
+        </div>
+    </div>
+
+    {# Custom filter to get item from list by index #}
+    {% load custom_filters %} 
+
+    {# JavaScript for Dynamic Formset Management #}
+    <script>
+        function addFormsetRow(formsetType) {
+            let containerId = '';
+            let totalFormsId = '';
+            let emptyFormHtmlId = '';
+            let formsetPrefix = '';
+
+            if (formsetType === 'plastic-code') {
+                containerId = 'plastic-code-formset-container';
+                totalFormsId = 'id_plastic_codes-TOTAL_FORMS';
+                emptyFormHtmlId = 'empty-plastic-code-form';
+                formsetPrefix = 'plastic_codes';
+            } else if (formsetType === 'input-file') {
+                containerId = 'input-file-formset-container';
+                totalFormsId = 'id_input_files-TOTAL_FORMS';
+                emptyFormHtmlId = 'empty-input-file-form';
+                formsetPrefix = 'input_files';
+            } else {
+                console.error('Unknown formset type:', formsetType);
+                return;
+            }
+
+            const container = document.getElementById(containerId);
+            const totalFormsInput = document.getElementById(totalFormsId);
+            let currentForms = parseInt(totalFormsInput.value);
+
+            const emptyFormTemplate = document.getElementById(emptyFormHtmlId);
+            const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
+            
+            const newRowWrapper = document.createElement('div');
+            newRowWrapper.innerHTML = newRowHtml;
+            const newRow = newRowWrapper.firstElementChild; // Get the actual row element
+
+            // Re-initialize any date/time inputs if they are type="datetime-local"
+            newRow.querySelectorAll('input[type="datetime-local"]').forEach(input => {
+                input.value = ''; // Clear previous value
+            });
+
+            container.appendChild(newRow);
+            totalFormsInput.value = currentForms + 1;
+
+            // Add delete button functionality to the new row
+            const deleteButton = newRow.querySelector('.delete-button');
+            if (deleteButton) {
+                deleteButton.onclick = function() { deleteFormsetRow(this); };
+            }
+
+            // If adding a plastic code row, update its options
+            if (formsetType === 'plastic-code') {
+                const newPlasticCodeSelect = newRow.querySelector('select[id$="-plastic_code_lookup"]');
+                if (newPlasticCodeSelect) {
+                    updatePlasticCodeOptions(newPlasticCodeSelect);
+                }
+            }
+            // If adding an input file row, initialize its nested PAN formset
+            else if (formsetType === 'input-file') {
+                const panNestedContainer = newRow.querySelector('.nested-formset-container');
+                if (panNestedContainer) {
+                    const nestedTotalFormsInput = panNestedContainer.querySelector('input[id$="-TOTAL_FORMS"]');
+                    nestedTotalFormsInput.value = 1; // Initialize with 1 empty form for PANs
+                    
+                    const emptyPanFormTemplate = document.getElementById('empty-pan-form');
+                    const initialPanRowHtml = emptyPanFormTemplate.innerHTML.replace(/__prefix__/g, 0); // Start with prefix 0 for the first PAN form
+                    
+                    const panRowWrapper = document.createElement('div');
+                    panRowWrapper.innerHTML = initialPanRowHtml;
+                    const panRow = panRowWrapper.firstElementChild;
+                    panNestedContainer.appendChild(panRow);
+
+                    // Re-enable delete button for nested PANs
+                    const deletePanButton = panRow.querySelector('.delete-button');
+                    if (deletePanButton) {
+                        deletePanButton.onclick = function() { deleteNestedFormsetRow(this); };
+                    }
+                }
+            }
+        }
+
+        function deleteFormsetRow(button) {
+            const row = button.closest('.inline-formset-row');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.style.display = 'none'; // Hide the row instead of removing it
+            } else {
+                row.remove(); // Fallback if no DELETE checkbox (shouldn't happen with inlineformset_factory)
+            }
+        }
+
+        function addNestedFormsetRow(button, formsetPrefix) {
+            const container = button.previousElementSibling; // The container div holding the nested forms
+            const totalFormsInput = container.querySelector(`input[name="${formsetPrefix}-TOTAL_FORMS"]`);
+            let currentForms = parseInt(totalFormsInput.value);
+
+            const emptyFormTemplate = document.getElementById('empty-pan-form');
+            const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
+            
+            const newRowWrapper = document.createElement('div');
+            newRowWrapper.innerHTML = newRowHtml;
+            const newRow = newRowWrapper.firstElementChild;
+
+            container.appendChild(newRow);
+            totalFormsInput.value = currentForms + 1;
+
+            const deleteButton = newRow.querySelector('.delete-button');
+            if (deleteButton) {
+                deleteButton.onclick = function() { deleteNestedFormsetRow(this); };
+            }
+        }
+
+        function deleteNestedFormsetRow(button) {
+            const row = button.closest('.nested-formset-row');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.style.display = 'none';
+            } else {
+                row.remove();
+            }
+        }
+    </script>
+
+    {# Empty form templates for JavaScript to clone #}
+    <div style="display: none;">
+        {# Plastic Code Empty Form #}
+        <div id="empty-plastic-code-form">
+            <div class="inline-formset-row">
+                {% for field in plastic_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete</button>
+            </div>
+        </div>
+
+        {# Input File Empty Form #}
+        <div id="empty-input-file-form">
+            <div class="inline-formset-row">
+                {% for field in input_file_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete Input File</button>
+
+                {# Nested PAN Formset for an empty Input File #}
+                <div class="nested-formset-container w-full">
+                    <h3 class="text-xl font-semibold text-gray-600 mb-3">PANs for New File</h3>
+                    {# This needs a dynamically named management form #}
+                    {# The actual management form for the empty form will be rendered by pan_formset.management_form when it's initially created for the first input_file_form #}
+                    {# For newly added input_file_forms by JS, we need to manually insert its management form with the correct prefix #}
+                    <input type="hidden" name="input_files-__prefix__-pans-TOTAL_FORMS" id="id_input_files-__prefix__-pans-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-INITIAL_FORMS" id="id_input_files-__prefix__-pans-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MIN_NUM_FORMS" id="id_input_files-__prefix__-pans-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MAX_NUM_FORMS" id="id_input_files-__prefix__-pans-MAX_NUM_FORMS" value="1000">
+                    
+                    {# The button for adding new PANs inside this new input file #}
+                    <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600" 
+                        onclick="addNestedFormsetRow(this, 'input_files-__prefix__-pans')">Add Another PAN</button>
+                </div>
+            </div>
+        </div>
+
+        {# PAN Empty Form (for nested formset) #}
+        <div id="empty-pan-form">
+            <div class="nested-formset-row">
+                {% for field in pans_formsets.0.empty_form %} {# Use .0 to get the first formset's empty_form #}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteNestedFormsetRow(this)">Delete PAN</button>
+            </div>
+        </div>
+    </div>
+
+    {# JavaScript for Dynamic Dropdowns #}
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            const customerSelect = $('#id_customer');
+            const environmentSelect = $('#id_tvf_environment');
+            const projectSelect = $('#id_project');
+            const trustportFolderSelect = $('#id_trustport_folder_actual');
+            const dispatchMethodSelect = $('#id_shipping-dispatch_method');
+            const plasticCodeLookupContainer = $('#plastic-code-formset-container');
+            const plasticCodeFormsetContainer = $('#plastic-code-formset-container');
+            function getPanPlasticCodeSelects() {
+            return $('select.pan-plastic-code-lookup');
+        }
+
+        function updateProjectOptions() {
+            const customerId = customerSelect.val();
+            const environmentId = environmentSelect.val();
+            projectSelect.empty().append($('<option></option>').attr('value', '').text('Select Project')); // Clear first
+            
+            if (customerId && environmentId) {
+                $.ajax({
+                    url: '{% url "test_requests:get_filtered_projects" %}', // Make sure this URL name is correct
+                    data: {
+                        'customer_id': customerId,
+                        'environment_id': environmentId
+                    },
+                    success: function(data) {
+                        projectSelect.append($('<option></option>').attr('value', '').text('Select Project'));
+                        $.each(data.projects, function(key, value) {
+                            projectSelect.append($('<option></option>').attr('value', value.id).text(value.name));
+                        });
+                        projectSelect.val("{{ form.project.value|default:'' }}"); // Restore selection if any
+                        projectSelect.change(); // Trigger change to update dependents like Trustport folder
+                    }
+                });
+            } else {
+                 projectSelect.change(); // Still trigger to clear dependents
+            }
+        }
+
+        function updateDependentOnProjectOptions() {
+            const customerId = customerSelect.val();
+            const projectId = projectSelect.val();
+            const environmentId = environmentSelect.val(); // Also needed for plastic codes
+
+            // Update Trustport Folders
+            trustportFolderSelect.empty().append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+            if (customerId && projectId) {
+                $.ajax({
+                    url: '{% url "test_requests:get_filtered_trustport_folders" %}', // Make sure this URL name is correct
+                    data: { 'customer_id': customerId, 'project_id': projectId },
+                    success: function(data) {
+                        trustportFolderSelect.append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+                        $.each(data.folders, function(key, value) {
+                            trustportFolderSelect.append($('<option></option>').attr('value', value.id).text(value.folder_path));
+                        });
+                        trustportFolderSelect.val("{{ form.trustport_folder_actual.value|default:'' }}"); // Restore
+                    }
+                });
+            }
+
+            // Update All Plastic Code Dropdowns (main section and PANs section)
+            updateAllPlasticCodeDropdowns(customerId, projectId, environmentId);
+        }
+
+        function updateAllPlasticCodeDropdowns(customerId, projectId, environmentId) {
+            const selectsToUpdate = plasticCodeFormsetContainer.find('select[id$="-plastic_code_lookup"]')
+                                      .add(getPanPlasticCodeSelects()); // Combine both sets of selects
+
+            selectsToUpdate.each(function() {
+                const currentSelect = $(this);
+                const selectedValue = currentSelect.val(); // Preserve selected value if possible
+                currentSelect.empty().append($('<option value=""></option>').text('Select Plastic Code'));
+                
+                if (customerId && projectId && environmentId) {
+                    $.ajax({
+                        url: '{% url "test_requests:get_filtered_plastic_codes" %}',
+                        data: {
+                            'customer_id': customerId,
+                            'project_id': projectId,
+                            'environment_id': environmentId // Send environment ID
+                        },
+                        success: function(data) {
+                            $.each(data.plastic_codes, function(key, value) {
+                                currentSelect.append($('<option></option>').attr('value', value.id).text(value.code));
+                            });
+                            if (selectedValue) { // Try to restore previous selection
+                                currentSelect.val(selectedValue);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+                    // Update Dispatch Methods
+                    $.ajax({
+                        url: '{% url "test_requests:get_filtered_dispatch_methods" %}',
+                        data: { 'customer_id': customerId, 'project_id': projectId },
+                        success: function(data) {
+                            dispatchMethodSelect.empty();
+                            dispatchMethodSelect.append($('<option></option>').attr('value', '').text('Select Dispatch Method'));
+                            $.each(data.methods, function(key, value) {
+                                dispatchMethodSelect.append($('<option></option>').attr('value', value.id).text(value.name));
+                            });
+                        }
+                    });
+
+                    // Update Plastic Codes for all formset rows
+                    updateAllPlasticCodeOptions();
+
+                } else {
+                    trustportFolderSelect.empty().append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+                    dispatchMethodSelect.empty().append($('<option></option>').attr('value', '').text('Select Dispatch Method'));
+                    updateAllPlasticCodeOptions();
+                }
+            }
+
+            function updateAllPlasticCodeOptions() {
+                const customerId = customerSelect.val();
+                const projectId = projectSelect.val();
+                
+                // Select all plastic code dropdowns currently in the DOM
+                const plasticCodeLookupSelects = plasticCodeLookupContainer.find('select[id$="-plastic_code_lookup"]');
+
+                plasticCodeLookupSelects.each(function() {
+                    const currentPlasticCodeSelect = $(this);
+                    currentPlasticCodeSelect.empty().append($('<option></option>').attr('value', '').text('Select Plastic Code (if in lookup)'));
+
+                    if (customerId && projectId) {
+                        $.ajax({
+                            url: '{% url "test_requests:get_filtered_plastic_codes" %}',
+                            data: { 'customer_id': customerId, 'project_id': projectId },
+                            success: function(data) {
+                                $.each(data.plastic_codes, function(key, value) {
+                                    currentPlasticCodeSelect.append($('<option></option>').attr('value', value.id).text(value.code));
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Event listeners
+            customerSelect.change(updateProjectOptions);
+            environmentSelect.change(updateProjectOptions);
+            projectSelect.change(updateDependentOptions);
+
+            // Initial load
+            if (customerSelect.val() && environmentSelect.val()) {
+            updateProjectOptions(); 
+            // updateDependentOnProjectOptions will be triggered by projectSelect.change() if project gets a value
+        } else {
+             updateDependentOnProjectOptions(); // Clear dependents if no customer/env/project
+        }
+
+        // Function to calculate Request Ship Date based on SLA
+        $(document).ready(function() {
+            const requestReceivedDateInput = $('#id_request_received_date');
+            const requestShipDateInput = $('#id_request_ship_date');
+            const customerSelect = $('#id_customer');
+
+            function calculateShipDate() {
+                const receivedDateStr = requestReceivedDateInput.val();
+                const customerId = customerSelect.val();
+
+                if (receivedDateStr && customerId) {
+                    $.ajax({
+                        url: '{% url "test_requests:get_sla_and_calculate_ship_date" %}',
+                        data: {
+                            'received_date': receivedDateStr,
+                            'customer_id': customerId
+                        },
+                        success: function(data) {
+                            if (data.ship_date) {
+                                requestShipDateInput.val(data.ship_date);
+                            } else {
+                                requestShipDateInput.val('');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Error calculating ship date:", error);
+                            requestShipDateInput.val('');
+                        }
+                    });
+                } else {
+                    requestShipDateInput.val('');
+                }
+            }
+
+            requestReceivedDateInput.on('change', calculateShipDate);
+            customerSelect.on('change', calculateShipDate);
+
+            if (requestReceivedDateInput.val() && customerSelect.val()) {
+                calculateShipDate();
+            } else if (requestReceivedDateInput.val()) {
+                 requestShipDateInput.val('');
+            }
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,156 @@
+/* tvf_app/static/css/style.css */
+
+body {
+    padding-top: 56px; /* Adjust for fixed navbar */
+    background-color: #f8f9fa;
+}
+
+.navbar {
+    background-color: #343a40!important; /* Dark navbar */
+}
+
+.navbar-brand,.nav-link {
+    color: #ffffff!important; /* White text for navbar */
+}
+
+.navbar-brand:hover,.nav-link:hover {
+    color: #cccccc!important;
+}
+
+.container {
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.card {
+    margin-bottom: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #007bff;
+    color: white;
+    font-weight: bold;
+    border-bottom: 1px solid #007bff;
+    border-top-left-radius: calc(0.5rem - 1px);
+    border-top-right-radius: calc(0.5rem - 1px);
+}
+
+.form-group label {
+    font-weight: bold;
+}
+
+.form-control {
+    border-radius: 0.25rem;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+}
+
+.messages {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+}
+
+.messages li {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.messages.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.messages.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.table th {
+    background-color: #e9ecef;
+}
+
+/* Specific styles for inline formsets */
+.inline-formset-row {
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 10px;
+    background-color: #fdfdfd;
+    border-radius: 5px;
+}
+.inline-formset-row.form-group {
+    margin-bottom: 10px;
+}
+.inline-formset-row.delete-row {
+    margin-top: 10px;
+}
+.add-row-button {
+    margin-top: 15px;
+}
+
+/* PDF Template Specific Styles (will be embedded directly in PDF HTML) */
+.pdf-header,.pdf-footer {
+    text-align: center;
+    font-size: 10px;
+    color: #555;
+}
+.pdf-header img {
+    max-height: 50px;
+    margin-bottom: 10px;
+}
+.pdf-section {
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+    padding: 10px;
+    border-radius: 5px;
+}
+.pdf-section h4 {
+    background-color: #f0f0f0;
+    padding: 5px;
+    margin-top: 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+}
+.pdf-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+.pdf-table th,.pdf-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    font-size: 12px;
+}
+.pdf-table th {
+    background-color: #f2f2f2;
+}
+.pdf-signature-line {
+    border-bottom: 1px solid #000;
+    width: 200px;
+    margin-top: 50px;
+    display: inline-block;
+}
+.pdf-checkbox {
+    border: 1px solid #000;
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 5px;
+}
