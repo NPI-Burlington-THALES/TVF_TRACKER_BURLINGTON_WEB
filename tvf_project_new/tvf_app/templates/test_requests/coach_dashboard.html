@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}Coach Dashboard{% endblock %}
+
+{% block content %}
+    <h1>Coach Dashboard ({{ role }})</h1>
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <h2>Open TVFs</h2>
+    <p>Logged in as: <strong>{{ user.username }}</strong></p>
+    <p>Your Groups:
+        {% for group in user.groups.all %}
+            <strong>{{ group.name }}</strong>{% if not forloop.last %}, {% endif %}
+        {% empty %}
+            None
+	{% endfor %}
+    </p>
+
+    {% if is_project_manager %}
+        <p><a href="{% url 'test_requests:create_tvf' %}" class="btn btn-primary">Create New TVF</a></p>
+    {% endif %}
+
+    {% if open_tvfs %}
+        <table border="1">
+            <thead>
+                <tr>
+                    <th>TVF Number</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Current Status</th>
+                    <th>Current Phase</th>
+                    <th>Comments</th>
+                    <th>Creation Date</th>
+                    <th>Ship Date</th>
+                    <th>Run Today?</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tvf in open_tvfs %}
+                    <tr>
+                        <td>{{ tvf.tvf_number }}</td>
+                        <td>{{ tvf.tvf_name|default:"N/A" }}</td>
+                        <td>{{ tvf.tvf_type.name|default:"N/A" }}</td>
+                        <td>{{ tvf.status.name|default:"N/A" }}</td>
+                        <td>{{ tvf.current_phase.name|default:"N/A" }}</td>
+                        <td>{{ tvf.comments|truncatechars:50|default:"-" }}</td>
+                        <td>{{ tvf.date_created|date:"Y-m-d H:i" }}</td>
+                        <td>{{ tvf.request_ship_date|date:"Y-m-d"|default:"N/A" }}</td>
+                        <td>
+                            {# Add 'run_today' field to TestRequest model if not there #}
+                            {% if tvf.run_today %}Yes{% else %}No{% endif %}
+                        </td>
+                        <td>
+                            {# Example conditions for NPI, Quality, Logistics to update based on current phase #}
+                            {% if is_npi_user and tvf.current_phase.name == 'NPI Data Processing' %}
+                                <a href="{% url 'test_requests:npi_update_tvf' tvf.pk %}">Update (NPI)</a> |
+                            {% elif is_quality_user and tvf.current_phase.name == 'Quality Validation' %}
+                                <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}">Update (Quality)</a> |
+                            {% elif is_logistics_user and tvf.current_phase.name == 'Logistics Dispatch' %}
+                                <a href="{% url 'test_requests:logistics_update_tvf' tvf.pk %}">Update (Logistics)</a> |
+                            {% else %}
+                                <em>Not in your queue</em> |
+                            {% endif %}
+                            
+                            {# All roles (or specific ones) can access reject if not completed/shipped #}
+                            {% if tvf.status.name != 'Completed' and tvf.status.name != 'Shipped' %}
+                                {% if is_project_manager or is_npi_user or is_quality_user or is_logistics_user or is_coach %}
+                                    <a href="{% url 'test_requests:reject_tvf' tvf.pk %}">Reject</a>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No open TVFs found.</p>
+    {% endif %}
+{% endblock %}

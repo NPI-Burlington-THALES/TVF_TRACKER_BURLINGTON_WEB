@@ -1,0 +1,54 @@
+{# tvf_app/test_requests/templates/test_requests/test_request_list.html #}
+{% extends 'base.html' %}
+
+{% block title %}All Test Requests{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        All Test Requests
+    </div>
+    <div class="card-body">
+        <a href="{% url 'test_requests:create' %}" class="btn btn-primary mb-3">Create New Test Request</a>
+
+        {% if test_requests %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>TVF #</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Initiator</th>
+                            <th>Status</th>
+                            <th>Created Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tr in test_requests %}
+                        <tr>
+                            <td>{{ tr.tvf_number }}</td>
+                            <td>{{ tr.tvf_name }}</td>
+                            <td>{{ tr.customer.name }}</td>
+                            <td>{{ tr.project.name }}</td>
+                            <td>{{ tr.tvf_initiator.username }}</td>
+                            <td>{{ tr.status.name }}</td>
+                            <td>{{ tr.date_created|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <a href="{% url 'test_requests:detail' pk=tr.pk %}" class="btn btn-info btn-sm">View</a>
+                                <a href="{% url 'test_requests:update' pk=tr.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                                <a href="{% url 'test_requests:pdf' pk=tr.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No test requests found. <a href="{% url 'test_requests:create' %}">Create one now!</a></p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

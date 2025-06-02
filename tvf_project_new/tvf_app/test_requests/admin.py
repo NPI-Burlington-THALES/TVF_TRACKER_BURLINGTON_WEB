@@ -86,12 +86,11 @@ class TestRequestInputFileInline(admin.TabularInline):
     fields = ('file_name', 'date_file_received', 'card_co', 'card_wo', 'card_qty', 'pin_co', 'pin_wo', 'pin_qty')
 
 
-class TestRequestPANInline(admin.TabularInline): # Placeholder if not already defined in your actual file
+class TestRequestPANInline(admin.TabularInline):
     model = TestRequestPAN
     extra = 1
-    # Define fields for the PAN inline if you haven't already
-    fields = ('pan_truncated', 'is_available', 'plastic_code_lookup', 'manual_plastic_code_for_pan')
-    raw_id_fields = ('plastic_code_lookup',)
+    # Specify fields for admin inline
+    fields = ('pan_truncated', 'is_available')
 
 
 class TestRequestPhaseLogInline(admin.TabularInline):
@@ -132,11 +131,11 @@ class TestRequestAdmin(admin.ModelAdmin):
 
 @admin.register(TestRequestInputFile)
 class TestRequestInputFileAdmin(admin.ModelAdmin):
-    list_display = ('test_request', 'file_name', 'date_file_received') # <-- CORRECTED: Removed card_qty and pin_qty
+    list_display = ('test_request', 'file_name', 'card_qty', 'pin_qty', 'date_file_received')
     list_filter = ('test_request__customer', 'test_request__project', 'test_request')
     search_fields = ('file_name__icontains', 'test_request__tvf_number__iexact')
     raw_id_fields = ('test_request',)
-    inlines = [TestRequestPANInline]
+    inlines = [TestRequestPANInline] # Add PAN inline here for nested management in admin
 
 @admin.register(TestRequestPAN)
 class TestRequestPANAdmin(admin.ModelAdmin):

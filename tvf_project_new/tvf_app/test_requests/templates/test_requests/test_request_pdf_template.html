@@ -1,0 +1,241 @@
+{# tvf_app/test_requests/templates/test_requests/test_request_pdf_template.html #}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Request {{ test_request.tvf_number }}</title>
+    <style>
+        /* Basic CSS for PDF - keep it simple for xhtml2pdf */
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            margin: 20mm; /* Margins for print */
+        }
+        h1, h2, h3, h4 {
+            color: #333;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+        h1 { font-size: 24px; text-align: center; }
+        h2 { font-size: 18px; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; }
+        h4 { font-size: 14px; background-color: #f0f0f0; padding: 5px; border-left: 5px solid #007bff; margin-bottom: 10px;}
+
+       .header-info {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+       .header-info p {
+            margin: 2px 0;
+        }
+
+       .section {
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+            padding: 10px;
+            border-radius: 5px;
+        }
+       .section-content {
+            display: flex;
+            flex-wrap: wrap;
+        }
+       .field-pair {
+            width: 48%; /* Approx half width for two columns */
+            margin-bottom: 8px;
+            display: inline-block; /* For side-by-side layout */
+            vertical-align: top;
+        }
+       .field-pair strong {
+            display: block;
+            margin-bottom: 2px;
+            color: #555;
+        }
+       .full-width-field {
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            font-size: 11px;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+       .checkbox-box {
+            border: 1px solid black;
+            width: 12px;
+            height: 12px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+       .signature-line {
+            border-bottom: 1px solid #000;
+            width: 200px;
+            margin-top: 50px;
+            display: inline-block;
+        }
+       .page-footer {
+            position: running(footer);
+            text-align: center;
+            font-size: 9px;
+            color: #777;
+        }
+        @page {
+            @bottom-center {
+                content: element(page-footer);
+            }
+        }
+       .page-number:before {
+            content: "Page " counter(page) " of " counter(pages);
+        }
+    </style>
+</head>
+<body>
+    <div class="page-footer">
+        <span class="page-number"></span> - Generated on {{ current_date|date:"Y-m-d H:i" }}
+    </div>
+
+    <h1>Test Validation Form (Client Test)</h1>
+
+    <div class="header-info">
+        <p><strong>TVF Number:</strong> {{ test_request.tvf_number }}</p>
+        <p><strong>CR Number:</strong> {{ test_request.cr_number|default:"N/A" }}</p>
+        <p><strong>Date Created:</strong> {{ test_request.date_created|date:"Y-m-d H:i" }}</p>
+    </div>
+
+    <h2>General Information</h2>
+    <div class="section">
+        <div class="field-pair"><strong>Customer:</strong> {{ test_request.customer.name }}</div>
+        <div class="field-pair"><strong>Project:</strong> {{ test_request.project.name }}</div>
+        <div class="field-pair"><strong>TVF Name:</strong> {{ test_request.tvf_name }}</div>
+        <div class="field-pair"><strong>TVF Initiator:</strong> {{ test_request.tvf_initiator.username }}</div>
+        <div class="field-pair"><strong>TVF Type:</strong> {{ test_request.tvf_type.name }}</div>
+        <div class="field-pair"><strong>TVF Environment:</strong> {{ test_request.tvf_environment.name }}</div>
+        <div class="field-pair"><strong>PIN Mailer:</strong> {% if test_request.tvf_pin_mailer %}Yes{% else %}No{% endif %}</div>
+        <div class="field-pair"><strong>Status:</strong> {{ test_request.status.name }}</div>
+        <div class="field-pair"><strong>Current Phase:</strong> {{ test_request.current_phase.name|default:"N/A" }}</div>
+        <div class="field-pair"><strong>Request Received Date:</strong> {{ test_request.request_received_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+        <div class="field-pair"><strong>Requested Ship Date:</strong> {{ test_request.request_ship_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+        <div class="field-pair"><strong>Completed Date:</strong> {{ test_request.tvf_completed_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+        <div class="field-pair"><strong>S-Code:</strong> {{ test_request.s_code|default:"N/A" }}</div>
+        <div class="field-pair"><strong>D-Code:</strong> {{ test_request.d_code|default:"N/A" }}</div>
+        <div class="full-width-field"><strong>Comments:</strong> {{ test_request.comments|default:"N/A" }}</div>
+        <div class="full-width-field"><strong>Tester Comments:</strong> {{ test_request.tester_comments|default:"N/A" }}</div>
+    </div>
+
+    <h2>Configuration Versions</h2>
+    <div class="section">
+        <div class="field-pair"><strong>Trustport Folder:</strong> {{ test_request.trustport_folder_actual|default:"N/A" }}</div>
+        <div class="field-pair"><strong>Pres Config Version:</strong> {{ test_request.pres_config_version|default:"N/A" }}</div>
+        <div class="field-pair"><strong>Proc Config Version:</strong> {{ test_request.proc_config_version|default:"N/A" }}</div>
+        <div class="field-pair"><strong>PIN Config Version:</strong> {{ test_request.pin_config_version|default:"N/A" }}</div>
+    </div>
+
+    <h2>Plastic Code Entries</h2>
+    {% if test_request.plastic_codes_entries.all %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Plastic Code</th>
+                    <th>Quantity</th>
+                    <th>Thermal Colour</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in test_request.plastic_codes_entries.all %}
+                <tr>
+                    <td>{{ entry.plastic_code_lookup.code }}</td>
+                    <td>{{ entry.quantity }}</td>
+                    <td>{{ entry.thermal_colour|default:"N/A" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No plastic code entries for this TVF.</p>
+    {% endif %}
+
+    <h2>Input File Entries</h2>
+    {% if test_request.input_files_entries.all %}
+        {% for input_file in test_request.input_files_entries.all %}
+            <div class="section">
+                <h4>File: {{ input_file.file_name|default:"N/A" }} (Received: {{ input_file.date_file_received|date:"Y-m-d H:i"|default:"N/A" }})</h4>
+                <div class="section-content">
+                    <div class="field-pair"><strong>Card CO:</strong> {{ input_file.card_co|default:"N/A" }}</div>
+                    <div class="field-pair"><strong>Card WO:</strong> {{ input_file.card_wo|default:"N/A" }}</div>
+                    <div class="field-pair"><strong>Card Qty:</strong> {{ input_file.card_qty }}</div>
+                    <div class="field-pair"><strong>PIN CO:</strong> {{ input_file.pin_co|default:"N/A" }}</div>
+                    <div class="field-pair"><strong>PIN WO:</strong> {{ input_file.pin_wo|default:"N/A" }}</div>
+                    <div class="field-pair"><strong>PIN Qty:</strong> {{ input_file.pin_qty }}</div>
+                </div>
+
+                {% if input_file.pans.all %}
+                    <h5>Associated PANs:</h5>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>PAN (Truncated)</th>
+                                <th>Available</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pan in input_file.pans.all %}
+                            <tr>
+                                <td>{{ pan.pan_truncated }}</td>
+                                <td><div class="checkbox-box">{% if pan.is_available %}X{% endif %}</div></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>No PANs associated with this input file.</p>
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No input file entries for this TVF.</p>
+    {% endif %}
+
+    <h2>Quality</h2>
+    {% with quality=test_request.quality_details %}
+        {% if quality %}
+            <div class="section">
+                <div class="full-width-field">
+                    <div class="checkbox-box">{% if quality.output_accordance_request %}X{% endif %}</div> Output in Accordance with request
+                </div>
+                <div class="full-width-field">
+                    <div class="checkbox-box">{% if quality.checked_against_specifications %}X{% endif %}</div> Checked against specifications being tested
+                </div>
+                <div class="field-pair"><strong>Quality Sign Off:</strong> {{ quality.quality_sign_off_by.username|default:"N/A" }}</div>
+                <div class="field-pair"><strong>Quality Sign Off Date:</strong> {{ quality.quality_sign_off_date|date:"Y-m-d H:i"|default:"N/A" }}</div>
+            </div>
+        {% else %}
+            <p>No quality details available.</p>
+        {% endif %}
+    {% endwith %}
+
+    <h2>Shipping</h2>
+    {% with shipping=test_request.shipping_details %}
+        {% if shipping %}
+            <div class="section">
+                <div class="field-pair"><strong>Dispatch Method:</strong> {{ shipping.dispatch_method.name|default:"N/A" }}</div>
+                <div class="field-pair"><strong>Shipping Sign Off:</strong> {{ shipping.shipping_sign_off_by.username|default:"N/A" }}</div>
+                <div class="field-pair"><strong>Date Shipped:</strong> {{ shipping.date_shipped|date:"Y-m-d H:i"|default:"N/A" }}</div>
+                <div class="full-width-field"><strong>Ship To Address:</strong> <pre>{{ shipping.ship_to_address|default:"N/A" }}</pre></div>
+            </div>
+        {% else %}
+            <p>No shipping details available.</p>
+        {% endif %}
+    {% endwith %}
+
+</body>
+</html>

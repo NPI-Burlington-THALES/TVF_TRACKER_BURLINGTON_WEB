@@ -9,6 +9,9 @@ from django.utils import timezone
 # --- Lookup / Reference Models ---
 
 class Customer(models.Model):
+    """
+    Represents a customer.
+    """
     name = models.CharField(max_length=255, unique=True, help_text="Name of the customer")
     sla_days = models.IntegerField(default=0, help_text="Service Level Agreement in days for this customer (for analytics)")
     contact_person = models.CharField(max_length=255, blank=True, null=True, help_text="Primary contact person for the customer")
@@ -24,6 +27,9 @@ class Customer(models.Model):
         return self.name
 
 class TVFEnvironment(models.Model):
+    """
+    Represents the environment for a TVF (e.g., PAT, UAT, PROD).
+    """
     name = models.CharField(max_length=255, unique=True, help_text="Name of the TVF environment (e.g., PAT, UAT, PROD)")
 
     class Meta:
@@ -35,6 +41,9 @@ class TVFEnvironment(models.Model):
         return self.name
 
 class Project(models.Model):
+    """
+    Represents a project associated with a customer and TVF environment.
+    """
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, help_text="The customer associated with this project")
     name = models.CharField(max_length=255, help_text="Name of the project")
     tvf_environment = models.ForeignKey(TVFEnvironment, on_delete=models.PROTECT, help_text="The TVF environment for this project")
@@ -51,22 +60,27 @@ class Project(models.Model):
         return f"{self.customer.name} - {self.name} ({self.tvf_environment.name})"
 
 class PlasticCodeLookup(models.Model):
+    """
+    Represents a predefined plastic code.
+    """
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, help_text="The customer this plastic code belongs to")
     project = models.ForeignKey(Project, on_delete=models.PROTECT, help_text="The project this plastic code is used in")
     tvf_environment = models.ForeignKey(TVFEnvironment, on_delete=models.PROTECT, help_text="The TVF environment for this plastic code")
-    code = models.CharField(max_length=155, help_text="The unique plastic code (e.g., '01200733')") # Note: Consider if code should be unique *per project/customer* rather than globally unique if different customers can have same code. For now, assuming it's globally unique as per original.
+    code = models.CharField(max_length=155, unique=True, help_text="The unique plastic code (e.g., '01200733')")
     description = models.TextField(blank=True, null=True, help_text="Description of the plastic code")
 
     class Meta:
         verbose_name = "Plastic Code Lookup"
         verbose_name_plural = "Plastic Code Lookups"
         ordering = ['code']
-        unique_together = ('customer', 'project', 'tvf_environment', 'code') # Ensuring code is unique within a customer/project/environment context
 
     def __str__(self):
         return self.code
 
 class TVFType(models.Model):
+    """
+    Represents a type of TVF (e.g., 'EMV Keys', 'PIN Mailer').
+    """
     name = models.CharField(max_length=255, unique=True, help_text="Name of the TVF type")
 
     class Meta:
@@ -78,6 +92,9 @@ class TVFType(models.Model):
         return self.name
 
 class TVFStatus(models.Model):
+    """
+    Represents the status of a TVF (e.g., 'Pending', 'In Progress', 'Completed', 'Rejected').
+    """
     name = models.CharField(max_length=255, unique=True, help_text="Name of the TVF status")
 
     class Meta:
@@ -89,6 +106,9 @@ class TVFStatus(models.Model):
         return self.name
 
 class DispatchMethod(models.Model):
+    """
+    Represents available shipping/dispatch methods (e.g., 'XPRESSPOST', 'FEDEX').
+    """
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, null=True, blank=True, help_text="The customer this dispatch method is available for")
     project = models.ForeignKey(Project, on_delete=models.PROTECT, null=True, blank=True, help_text="The project this dispatch method is available for")
     name = models.CharField(max_length=255, help_text="Name of the dispatch method")
@@ -96,7 +116,7 @@ class DispatchMethod(models.Model):
     class Meta:
         verbose_name = "Dispatch Method"
         verbose_name_plural = "Dispatch Methods"
-        unique_together = ('customer', 'project', 'name')
+        unique_together = ('customer', 'project', 'name') # Ensure uniqueness per customer/project
         ordering = ['name']
 
     def __str__(self):
@@ -105,6 +125,9 @@ class DispatchMethod(models.Model):
         return f"{self.name} ({customer_name}/{project_name})"
 
 class TrustportFolder(models.Model):
+    """
+    Stores predefined Trustport folder paths, linked to Customer and Project.
+    """
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, help_text="The customer this Trustport folder belongs to")
     project = models.ForeignKey(Project, on_delete=models.PROTECT, help_text="The project this Trustport folder belongs to")
     folder_path = models.CharField(max_length=500, help_text="The actual Trustport folder path")
@@ -119,7 +142,11 @@ class TrustportFolder(models.Model):
         return f"{self.folder_path} ({self.customer.name} - {self.project.name})"
 
 class TestRequestPhaseDefinition(models.Model):
-    name = models.CharField(max_length=255, unique=True, help_text="Name of the phase")
+    """
+    Defines the different phases/departments a Test Request goes through.
+    Crucial for tracking time spent in each phase for analytics.
+    """
+    name = models.CharField(max_length=255, unique=True, help_text="Name of the phase (e.g., Data Entry, Personalization, Quality, Shipping)")
     order = models.IntegerField(unique=True, help_text="Order in which phases typically occur")
 
     class Meta:
@@ -131,6 +158,9 @@ class TestRequestPhaseDefinition(models.Model):
         return f"{self.order}. {self.name}"
 
 class RejectReason(models.Model):
+    """
+    Defines predefined reasons for rejecting a TVF.
+    """
     reason = models.CharField(max_length=255, unique=True, help_text="Reason for rejecting a TVF")
     description = models.TextField(blank=True, null=True, help_text="Detailed description of the reason")
 
@@ -145,6 +175,10 @@ class RejectReason(models.Model):
 # --- Main Test Request Model ---
 
 class TestRequest(models.Model):
+    """
+    The central model for each Test Validation Form.
+    """
+    # General Info
     tvf_number = models.IntegerField(unique=True, editable=False, db_index=True, help_text="Unique auto-incrementing TVF Number")
     cr_number = models.CharField(max_length=255, blank=True, null=True, help_text="Change Request Number from requestor")
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='test_requests', help_text="The customer for this TVF")
@@ -155,25 +189,36 @@ class TestRequest(models.Model):
     tvf_environment = models.ForeignKey(TVFEnvironment, on_delete=models.PROTECT, related_name='test_requests', help_text="The environment for this TVF (e.g., PAT)")
     tvf_pin_mailer = models.BooleanField(default=False, help_text="Indicates if this TVF is for a PIN mailer")
     run_today = models.BooleanField(default=False, help_text="Indicates if this TVF is scheduled to run today.")
+    
+    # Dates
     request_received_date = models.DateTimeField(help_text="Date and time when the request was received/submitted")
     request_ship_date = models.DateTimeField(blank=True, null=True, help_text="Requested ship date for the TVF (for SLA tracking)")
     tvf_completed_date = models.DateTimeField(blank=True, null=True, help_text="Actual date and time when the TVF was completed")
+
+    # Codes & Comments
     s_code = models.CharField(max_length=255, blank=True, null=True, help_text="S-Code for the TVF")
     d_code = models.CharField(max_length=255, blank=True, null=True, help_text="D-Code for the TVF")
     comments = models.TextField(blank=True, null=True, help_text="General comments for the TVF")
+
+    # Configuration Versions
     trustport_folder_actual = models.ForeignKey(TrustportFolder, on_delete=models.PROTECT, blank=True, null=True, help_text="Actual Trustport folder used for this specific TVF") 
     pres_config_version = models.CharField(max_length=255, blank=True, null=True, help_text="Personalization Configuration Version")
     proc_config_version = models.CharField(max_length=255, blank=True, null=True, help_text="Processing Configuration Version")
     pin_config_version = models.CharField(max_length=255, blank=True, null=True, help_text="PIN Configuration Version")
+
+    # Status and Phase Tracking (for analytics)
     status = models.ForeignKey(TVFStatus, on_delete=models.PROTECT, related_name='test_requests_by_status', help_text="Current status of the TVF")
     current_phase = models.ForeignKey(TestRequestPhaseDefinition, on_delete=models.PROTECT, blank=True, null=True, related_name='current_tvfs', help_text="Current phase of the TVF lifecycle")
     last_status_update = models.DateTimeField(auto_now=True, help_text="Automatically updated timestamp of the last status change")
+
+    # Rejection Fields
     is_rejected = models.BooleanField(default=False, help_text="Indicates if the TVF has been rejected")
     rejected_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name='rejected_tvfs', help_text="User who rejected the TVF")
     rejected_reason = models.ForeignKey(RejectReason, on_delete=models.PROTECT, null=True, blank=True, help_text="Reason for rejection")
     rejected_comments = models.TextField(blank=True, null=True, help_text="Additional comments for rejection")
     rejected_date = models.DateTimeField(blank=True, null=True, help_text="Date and time of rejection")
     
+    # Custom permissions for role-based access
     class Meta:
         verbose_name = "Test Request (TVF)"
         verbose_name_plural = "Test Requests (TVFs)"
@@ -184,50 +229,60 @@ class TestRequest(models.Model):
         return f"TVF {self.tvf_number}: {self.tvf_name} ({self.customer.name})"
 
     def save(self, *args, **kwargs):
-        if not self.pk: # Only on initial creation
-            if not self.status_id:
-                self.status, _ = TVFStatus.objects.get_or_create(name='Pending') # Or your desired initial status
-            if not self.current_phase_id:
-                 # Default to 'Project Manager' phase on creation if not set by view explicitly
-                self.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', defaults={'order': 1})
+        # Set initial status if not already set (e.g., 'Pending' or 'New')
+        if not self.status_id:
+            self.status, created = TVFStatus.objects.get_or_create(name='Pending')
+        # Set initial phase if not already set
+        if not self.current_phase_id:
+            self.current_phase, created = TestRequestPhaseDefinition.objects.get_or_create(name='Data Entry', order=1)
         super().save(*args, **kwargs)
 
+# Signal to auto-increment tvf_number
 @receiver(pre_save, sender=TestRequest)
 def set_tvf_number(sender, instance, **kwargs):
     if not instance.tvf_number:
         max_tvf_number = sender.objects.all().aggregate(Max('tvf_number'))['tvf_number__max']
-        instance.tvf_number = (max_tvf_number or 7554) + 1
+        instance.tvf_number = (max_tvf_number or 7554) + 1 # Start from 7555 if no existing TVFs
 
 # --- Related Models (One-to-Many) ---
 
 class TestRequestPlasticCode(models.Model):
+    """
+    Stores plastic codes and quantities for a specific TestRequest.
+    """
     test_request = models.ForeignKey(TestRequest, on_delete=models.CASCADE, related_name='plastic_codes_entries', help_text="The TVF this plastic code entry belongs to")
-    plastic_code_lookup = models.ForeignKey(PlasticCodeLookup, on_delete=models.PROTECT, null=True, blank=True, help_text="The specific plastic code used")
-    manual_plastic_code = models.CharField(max_length=255, blank=True, null=True, help_text="Manually entered plastic code if not in lookup.")
+    plastic_code_lookup = models.ForeignKey(PlasticCodeLookup, on_delete=models.PROTECT, null=True, blank=True, help_text="The specific plastic code used") # Made nullable for manual input
+    manual_plastic_code = models.CharField(max_length=255, blank=True, null=True, help_text="Manually entered plastic code if not in lookup.") # New field for manual entry
     quantity = models.IntegerField(help_text="Quantity for this plastic code")
-    # thermal_colour = models.CharField(max_length=255, blank=True, null=True, help_text="Thermal color associated with this plastic code") # REMOVED
+    thermal_colour = models.CharField(max_length=255, blank=True, null=True, help_text="Thermal color associated with this plastic code")
 
     class Meta:
         verbose_name = "Plastic Code Entry"
         verbose_name_plural = "Plastic Code Entries"
+        # unique_together = ('test_request', 'plastic_code_lookup') # Remove unique_together to allow nulls
         ordering = ['plastic_code_lookup__code', 'manual_plastic_code']
-        # Removed unique_together if manual_plastic_code allows multiple null lookups for same request.
-        # Consider if a TestRequest can have multiple entries for the *same* manual_plastic_code. If not, add a unique_together constraint.
 
     def __str__(self):
         code_display = self.plastic_code_lookup.code if self.plastic_code_lookup else self.manual_plastic_code
-        return f"TVF {self.test_request.tvf_number} - PC: {code_display} (Qty: {self.quantity})"
+        return f"{self.test_request.tvf_number} - {code_display} ({self.quantity})"
 
 class TestRequestInputFile(models.Model):
+    """
+    Stores details about input files, including card and PIN workorder quantities.
+    """
     test_request = models.ForeignKey(TestRequest, on_delete=models.CASCADE, related_name='input_files_entries', help_text="The TVF this input file entry belongs to")
     file_name = models.CharField(max_length=255, help_text="Name of the input file")
     date_file_received = models.DateTimeField(blank=True, null=True, help_text="Date and time when this input file was received")
+
+    # Workorders - Cards section
     card_co = models.CharField(max_length=255, blank=True, null=True, help_text="Card Control Order")
     card_wo = models.CharField(max_length=255, blank=True, null=True, help_text="Card Work Order")
-    # card_qty = models.IntegerField(default=0, help_text="Quantity of cards in this input file") # REMOVED
+    card_qty = models.IntegerField(default=0, help_text="Quantity of cards in this input file")
+
+    # Workorders - PINS section
     pin_co = models.CharField(max_length=255, blank=True, null=True, help_text="PIN Control Order")
     pin_wo = models.CharField(max_length=255, blank=True, null=True, help_text="PIN Work Order")
-    # pin_qty = models.IntegerField(default=0, help_text="Quantity of PINs expected in this input file") # REMOVED
+    pin_qty = models.IntegerField(default=0, help_text="Quantity of PINs expected in this input file")
 
     class Meta:
         verbose_name = "Input File Entry"
@@ -236,50 +291,31 @@ class TestRequestInputFile(models.Model):
         ordering = ['file_name']
 
     def __str__(self):
-        return f"TVF {self.test_request.tvf_number} - File: {self.file_name}"
+        return f"{self.test_request.tvf_number} - {self.file_name}"
 
 class TestRequestPAN(models.Model):
+    """
+    Stores truncated PANs associated with each input file within a test request.
+    """
     test_request_input_file = models.ForeignKey(TestRequestInputFile, on_delete=models.CASCADE, related_name='pans', help_text="The specific input file this PAN belongs to")
     pan_truncated = models.CharField(max_length=255, help_text="Truncated Primary Account Number (e.g., XXXXXXXXXXXX7067)")
-    is_available = models.BooleanField(default=False, help_text="Indicates if the PAN is available")
-    
-    # ADDED fields for plastic code context per PAN
-    plastic_code_lookup = models.ForeignKey(
-        PlasticCodeLookup,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        help_text="Link to a predefined plastic code for this PAN/group of PANs"
-    )
-    manual_plastic_code_for_pan = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        help_text="Manually entered plastic code specific to this PAN/group of PANs"
-    )
+    is_available = models.BooleanField(default=False, help_text="Indicates if the PAN is available (from 'Avble' in zc_tvfpans)")
 
     class Meta:
         verbose_name = "TVF PAN"
         verbose_name_plural = "TVF PANs"
-        # If a PAN truncated value should be unique *per plastic code context* within an input file, adjust unique_together:
-        # unique_together = ('test_request_input_file', 'pan_truncated', 'plastic_code_lookup', 'manual_plastic_code_for_pan')
-        # For now, keeping it unique per input file, assuming the plastic code is context.
-        unique_together = ('test_request_input_file', 'pan_truncated') 
+        unique_together = ('test_request_input_file', 'pan_truncated')
         ordering = ['pan_truncated']
 
     def __str__(self):
-        pc_context = ""
-        if self.plastic_code_lookup:
-            pc_context = f" (PC: {self.plastic_code_lookup.code})"
-        elif self.manual_plastic_code_for_pan:
-            pc_context = f" (Manual PC: {self.manual_plastic_code_for_pan})"
-        return f"File: {self.test_request_input_file.file_name} - PAN: {self.pan_truncated}{pc_context}"
-
+        return f"{self.test_request_input_file.file_name} - {self.pan_truncated}"
 
 # --- Quality and Shipping Models (One-to-One) ---
-# (No changes requested for these, so they remain as they were)
 
 class TestRequestQuality(models.Model):
+    """
+    Stores quality assurance details for a TestRequest.
+    """
     test_request = models.OneToOneField(TestRequest, on_delete=models.CASCADE, related_name='quality_details', help_text="The TVF this quality check is for")
     output_accordance_request = models.BooleanField(default=False, help_text="Output in accordance with request")
     checked_against_specifications = models.BooleanField(default=False, help_text="Checked against specifications being tested")
@@ -295,6 +331,9 @@ class TestRequestQuality(models.Model):
         return f"Quality for TVF {self.test_request.tvf_number}"
 
 class TestRequestShipping(models.Model):
+    """
+    Stores shipping details for a TestRequest.
+    """
     test_request = models.OneToOneField(TestRequest, on_delete=models.CASCADE, related_name='shipping_details', help_text="The TVF this shipping info is for")
     dispatch_method = models.ForeignKey(DispatchMethod, on_delete=models.PROTECT, null=True, blank=True, help_text="Method of dispatch (e.g., XPRESSPOST)")
     shipping_sign_off_by = models.ForeignKey(User, on_delete=models.PROTECT, blank=True, null=True, related_name='shipping_signed_off_tvfs', help_text="User who signed off on shipping")
@@ -308,6 +347,7 @@ class TestRequestShipping(models.Model):
     ship_to_state_province = models.CharField(max_length=255, blank=True, null=True, help_text="State/Province")
     ship_to_postal_code = models.CharField(max_length=20, blank=True, null=True, help_text="Postal Code")
     ship_to_country = models.CharField(max_length=255, blank=True, null=True, help_text="Country")
+    # Removed tracking_number field
     
     class Meta:
         verbose_name = "Shipping Information"
@@ -318,9 +358,12 @@ class TestRequestShipping(models.Model):
         return f"Shipping for TVF {self.test_request.tvf_number}"
 
 # --- Analytics and Audit Models ---
-# (No changes requested for these)
 
 class TestRequestPhaseLog(models.Model):
+    """
+    Logs the entry and exit times for a TVF in different phases/departments.
+    Crucial for calculating time spent in each phase.
+    """
     test_request = models.ForeignKey(TestRequest, on_delete=models.CASCADE, related_name='phase_logs', help_text="The TVF for this phase log")
     phase_name = models.ForeignKey(TestRequestPhaseDefinition, on_delete=models.PROTECT, help_text="The phase/department name")
     start_time = models.DateTimeField(default=timezone.now, help_text="When the TVF entered this phase")
@@ -338,11 +381,16 @@ class TestRequestPhaseLog(models.Model):
 
     @property
     def duration_minutes(self):
+        """Calculates the duration in minutes for this phase log entry."""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds() / 60
         return None
 
 class AuditLog(models.Model):
+    """
+    A generic audit log to track changes to any model instance.
+    This model will be managed by Django's migrations.
+    """
     timestamp = models.DateTimeField(auto_now_add=True, help_text="When the change occurred")
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, help_text="User who made the change")
     action = models.CharField(max_length=255, help_text="Type of action (e.g., 'created', 'updated', 'deleted')")

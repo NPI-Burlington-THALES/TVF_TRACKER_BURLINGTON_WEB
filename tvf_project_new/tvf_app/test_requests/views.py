@@ -4,86 +4,102 @@ from django.views.generic.edit import FormView
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 from datetime import timedelta
 from django.utils import timezone
-from django.http import JsonResponse
-from django.db.models import Q
+from django.forms import formset_factory # Not directly used for inlineformset_factory, but good to have if needed for standalone formsets.
+from django.db.models import Q # For OR queries in get_filtered_dispatch_methods
 
+# Import your models and forms
 from .models import (
     TestRequest, Customer, Project, TVFType, TVFEnvironment, TVFStatus,
     PlasticCodeLookup, DispatchMethod, TestRequestPhaseDefinition,
     TestRequestPlasticCode, TestRequestInputFile, TestRequestPAN,
-    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason
+    TestRequestQuality, TestRequestShipping, TrustportFolder
 )
 from .forms import (
-    TestRequestForm,
-    PlasticCodeFormSet, InputFileFormSet, PanInlineFormSet,
-    TestRequestShippingForm, TestRequestQualityForm # TestRequestQualityForm for other views if needed
+    TestRequestForm, TestRequestPlasticCodeForm, TestRequestInputFileForm,
+    TestRequestPANForm, TestRequestQualityForm, TestRequestShippingForm,
+    PlasticCodeFormSet, InputFileFormSet, PanInlineFormSet # Import PanInlineFormSet
 )
 
-# PDF Generation and User Group Checks (assumed to be correct from previous versions)
-# ... (render_to_pdf, RegisterView, is_project_manager, etc. ... )
-def is_project_manager(user): return user.groups.filter(name='Project Managers').exists()
-def is_npi_user(user): return user.groups.filter(name='NPI Users').exists()
-def is_quality_user(user): return user.groups.filter(name='Quality Users').exists()
-def is_logistics_user(user): return user.groups.filter(name='Logistics Users').exists()
-def is_coach(user): return user.groups.filter(name='Coaches').exists()
+# For PDF generation
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+
+def render_to_pdf(template_src, context_dict={}):
+    template = get_template(template_src)
+    html = template.render(context_dict)
+    response = HttpResponse(content_type='application/pdf')
+    # Use 'attachment' to force download, 'inline' to display in browser
+    response['Content-Disposition'] = 'attachment; filename="test_request.pdf"' 
+    pisa_status = pisa.CreatePDF(
+        html, dest=response)
+    if pisa_status.err:
+        return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    return response
+
+class RegisterView(FormView):
+    template_name = 'registration/register.html'
+    form_class = CustomUserCreationForm
+    success_url = reverse_lazy('login')
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, 'Account created successfully! Please log in.')
+        return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'There was an error with your registration. Please check the form.')
+        return super().form_invalid(form)
+
+def is_project_manager(user):
+    return user.groups.filter(name='Project Managers').exists()
+
+def is_npi_user(user):
+    return user.groups.filter(name='NPI Users').exists()
+
+def is_quality_user(user):
+    return user.groups.filter(name='Quality Users').exists()
+
+def is_logistics_user(user):
+    return user.groups.filter(name='Logistics Users').exists()
+
+def is_coach(user):
+    return user.groups.filter(name='Coaches').exists()
+
 def can_view_dashboard(user):
     return is_project_manager(user) or is_npi_user(user) or \
            is_quality_user(user) or is_logistics_user(user) or \
            is_coach(user) or user.is_superuser
 
-
 # --- AJAX Views for Dynamic Dropdowns ---
+from django.http import JsonResponse
+
 @login_required
 def get_filtered_projects(request):
     customer_id = request.GET.get('customer_id')
     environment_id = request.GET.get('environment_id')
     projects = []
     if customer_id and environment_id:
-        try:
-            projects = list(Project.objects.filter(
-                customer_id=int(customer_id),
-                tvf_environment_id=int(environment_id)
-            ).values('id', 'name').order_by('name'))
-        except ValueError: # Handle cases where IDs are not valid integers
-            pass
+        projects = list(Project.objects.filter(
+            customer_id=customer_id, tvf_environment_id=environment_id
+        ).values('id', 'name').order_by('name'))
     return JsonResponse({'projects': projects})
 
 @login_required
 def get_filtered_plastic_codes(request):
     customer_id = request.GET.get('customer_id')
     project_id = request.GET.get('project_id')
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-    environment_id = request.GET.get('environment_id')
     plastic_codes = []
-    if customer_id and project_id and environment_id:
-        try:
-            plastic_codes = list(PlasticCodeLookup.objects.filter(
-                customer_id=int(customer_id),
-                project_id=int(project_id),
-                tvf_environment_id=int(environment_id)
-            ).values('id', 'code').order_by('code'))
-        except ValueError:
-            pass
-=======
-    plastic_codes = []
-=======
-    plastic_codes = []
->>>>>>> parent of 63fccc0 (sdsd)
-=======
-    plastic_codes = []
->>>>>>> parent of 63fccc0 (sdsd)
     if customer_id and project_id:
         plastic_codes_query = PlasticCodeLookup.objects.filter(
             customer_id=customer_id, project_id=project_id
         ).values('id', 'code').order_by('code')
         plastic_codes = list(plastic_codes_query)
->>>>>>> parent of 63fccc0 (sdsd)
     return JsonResponse({'plastic_codes': plastic_codes})
 
 @login_required
@@ -92,13 +108,9 @@ def get_filtered_trustport_folders(request):
     project_id = request.GET.get('project_id')
     folders = []
     if customer_id and project_id:
-        try:
-            folders = list(TrustportFolder.objects.filter(
-                customer_id=int(customer_id),
-                project_id=int(project_id)
-            ).values('id', 'folder_path').order_by('folder_path'))
-        except ValueError:
-            pass
+        folders = list(TrustportFolder.objects.filter(
+            customer_id=customer_id, project_id=project_id
+        ).values('id', 'folder_path').order_by('folder_path'))
     return JsonResponse({'folders': folders})
 
 @login_required
@@ -106,228 +118,201 @@ def get_filtered_dispatch_methods(request):
     customer_id = request.GET.get('customer_id')
     project_id = request.GET.get('project_id')
     methods = []
-    try:
-        cid = int(customer_id) if customer_id else None
-        pid = int(project_id) if project_id else None
-
-        if cid and pid:
-            methods = list(DispatchMethod.objects.filter(
-                Q(customer_id=cid, project_id=pid) |
-                Q(customer__isnull=True, project__isnull=True)
-            ).values('id', 'name').order_by('name').distinct())
-        else: # Fallback to global if specific customer/project not provided
-            methods = list(DispatchMethod.objects.filter(
-                customer__isnull=True, project__isnull=True
-            ).values('id', 'name').order_by('name').distinct())
-    except ValueError:
-        pass # Or return error
+    # Dispatch methods can be global (customer/project is null) or specific
+    if customer_id and project_id:
+        methods = list(DispatchMethod.objects.filter(
+            Q(customer_id=customer_id, project_id=project_id) |
+            Q(customer__isnull=True, project__isnull=True) # Allow global methods
+        ).values('id', 'name').order_by('name'))
+    else: # If no specific customer/project, show only global ones
+        methods = list(DispatchMethod.objects.filter(
+            customer__isnull=True, project__isnull=True
+        ).values('id', 'name').order_by('name'))
     return JsonResponse({'methods': methods})
-
 
 @login_required
 def get_sla_and_calculate_ship_date(request):
     received_date_str = request.GET.get('received_date')
     customer_id = request.GET.get('customer_id')
-    ship_date_iso = None
+    ship_date = None
+
     if received_date_str and customer_id:
         try:
-            received_date = timezone.datetime.fromisoformat(received_date_str.replace(' ', 'T'))
-            customer = Customer.objects.get(pk=int(customer_id))
+            received_date = timezone.datetime.fromisoformat(received_date_str)
+            customer = Customer.objects.get(pk=customer_id)
             sla_days = customer.sla_days
-            if sla_days is not None:
-                calculated_ship_date = received_date + timedelta(days=sla_days)
-                ship_date_iso = calculated_ship_date.strftime('%Y-%m-%dT%H:%M')
-        except (ValueError, Customer.DoesNotExist):
-            pass # Silently fail or log error
-    return JsonResponse({'ship_date': ship_date_iso})
+
+            calculated_ship_date = received_date + timedelta(days=sla_days)
+            ship_date = calculated_ship_date.isoformat(timespec='minutes')
+        except (ValueError, Customer.DoesNotExist) as e:
+            print(f"Error calculating ship date: {e}")
+            pass
+
+    return JsonResponse({'ship_date': ship_date})
 
 
-# Helper function to save manual plastic codes to PlasticCodeLookup
-def get_or_create_plastic_code_lookup(customer, project, environment, code_value):
-    if not code_value:
-        return None
-    # Ensure all parent objects are valid before creating/getting lookup
-    if not all([customer, project, environment]):
-        # Log this error or handle appropriately
-        print(f"Warning: Missing customer, project, or environment when trying to create lookup for code: {code_value}")
-        return None
+# --- Coach View: Dashboard of ALL OPEN TVFs ---
+@login_required
+@user_passes_test(can_view_dashboard, login_url='test_requests:access_denied')
+def coach_dashboard(request):
+    open_statuses = TVFStatus.objects.exclude(name__in=['Completed', 'Shipped', 'Rejected']).values_list('name', flat=True) # Exclude 'Shipped' too
+    open_tvfs = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
     
-    lookup, created = PlasticCodeLookup.objects.get_or_create(
-        customer=customer,
-        project=project,
-        tvf_environment=environment,
-        code=code_value.strip() # Ensure no leading/trailing whitespace
-        # 'description' can be added to defaults if needed: defaults={'description': 'Manually entered'}
-    )
-    if created:
-        print(f"Created new PlasticCodeLookup: {lookup.code} for C:{customer.id}/P:{project.id}/E:{environment.id}")
-    return lookup
+    context = {
+        'open_tvfs': open_tvfs,
+        'role': 'Coach Dashboard',
+        'is_project_manager': is_project_manager(request.user),
+        'is_npi_user': is_npi_user(request.user),
+        'is_quality_user': is_quality_user(request.user),
+        'is_logistics_user': is_logistics_user(request.user),
+        'is_coach': is_coach(request.user),
+    }
+    return render(request, 'test_requests/coach_dashboard.html', context)
 
 
+# --- Project Manager View: Create TVF ---
 @login_required
 @user_passes_test(is_project_manager, login_url='test_requests:access_denied')
 def create_tvf_view(request):
-    form_kwargs_for_dependents = {}
-
     if request.method == 'POST':
-        form = TestRequestForm(request.POST)
+        input_file_form = TestRequestInputFileForm(request.POST, request.FILES)
+        plastic_formset = PlasticCodeFormSet(request.POST, prefix='plastic_codes')
+        input_file_formset = InputFileFormSet(request.POST, prefix='input_files')
+        shipping_form = TestRequestShippingForm(request.POST, prefix='shipping')
 
-        if form.is_valid():
-            # If main form is valid, extract customer, project, environment for dependent formsets
-            valid_customer = form.cleaned_data['customer']
-            valid_project = form.cleaned_data['project']
-            valid_environment = form.cleaned_data['tvf_environment']
-            form_kwargs_for_dependents = {
-                'parent_customer': valid_customer,
-                'parent_project': valid_project,
-                'parent_environment': valid_environment
-            }
-        # Initialize formsets with POST data and potentially parent context for validation
-        plastic_formset = PlasticCodeFormSet(request.POST, prefix='plastic_codes', form_kwargs=form_kwargs_for_dependents)
-        input_file_formset = InputFileFormSet(request.POST, prefix='input_files') # No direct parent_kwargs needed for its own fields
-        shipping_form = TestRequestShippingForm(request.POST, prefix='shipping', **form_kwargs_for_dependents)
+        pans_formsets = []
+        # Populate pans_formsets based on submitted input_file_formset
+        for i, input_file_form in enumerate(input_file_formset.forms):
+            # Regardless of validity, if the form is present (not just a placeholder)
+            # and not marked for deletion, try to get its nested formset.
+            # This is crucial for retaining submitted data for re-rendering on errors.
+            if not input_file_form.cleaned_data.get('DELETE', False):
+                prefix = f'input_files-{i}-pans'
+                # Pass instance=input_file_form.instance if it's an existing object (though for create it's new)
+                # For new forms, it will be None.
+                pan_formset = PanInlineFormSet(request.POST, instance=input_file_form.instance, prefix=prefix)
+                pans_formsets.append(pan_formset)
+        
+        # Check overall validity of main form and all formsets
+        is_valid = form.is_valid() and plastic_formset.is_valid() and input_file_formset.is_valid() and shipping_form.is_valid()
+        for pan_fs in pans_formsets:
+            is_valid = is_valid and pan_fs.is_valid()
 
-
-        # Prepare PanInlineFormSets
-        processed_pans_formsets = []
-        all_pan_formsets_valid = True # Assume true initially
-
-        # Iterate based on the number of input file forms submitted
-        for i in range(input_file_formset.total_form_count()):
-            pan_prefix = f'{input_file_formset.prefix}-{i}-pans'
-            # For PAN formset, pass parent context if available (from main form)
-            # The instance for PanInlineFormSet will be set later if input_file_form is valid and saved
-            pan_fs = PanInlineFormSet(request.POST, prefix=pan_prefix, form_kwargs=form_kwargs_for_dependents)
-            processed_pans_formsets.append(pan_fs)
-            # Defer PAN formset validation until after its parent input_file_form is validated
-
-
-        # Overall validation check
-        is_valid_main_form = form.is_valid() # Already checked, but good for clarity
-        is_valid_plastic = plastic_formset.is_valid()
-        is_valid_input_files = input_file_formset.is_valid()
-        is_valid_shipping = shipping_form.is_valid()
-
-        # Now validate PAN formsets, only if their parent input_file_form was valid
-        if is_valid_input_files:
-            for i, iff_form in enumerate(input_file_formset.forms):
-                if i < len(processed_pans_formsets): # Ensure index exists
-                    pan_fs_to_validate = processed_pans_formsets[i]
-                    if not iff_form.cleaned_data.get('DELETE', False): # Don't validate PANs for deleted input file
-                        if not pan_fs_to_validate.is_valid():
-                            all_pan_formsets_valid = False
-                    # If iff_form is to be deleted, its PANs don't need to be "valid" for submission
-                    # but they should not block if they contain errors but parent is deleted.
-                    # For simplicity, if input_file_formset is valid, we proceed to check PANs unless parent is deleted.
-        else: # If input_file_formset itself is invalid, then PANs cannot be meaningfully validated in context
-            all_pan_formsets_valid = False
-
-
-        if is_valid_main_form and is_valid_plastic and is_valid_input_files and is_valid_shipping and all_pan_formsets_valid:
+        if is_valid:
             try:
+                action = request.POST.get('action') # 'save_draft' or 'submit'
                 with transaction.atomic():
                     test_request = form.save(commit=False)
                     test_request.tvf_initiator = request.user
-                    
-                    action = request.POST.get('action')
+                    test_request.request_received_date = timezone.now() # Set current time as received date
+
                     if action == 'submit':
-                        status_name, phase_name, phase_order = 'TVF_SUBMITTED', 'NPI Data Processing', 2
+                        initial_status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED')
+                        submitted_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='NPI Data Processing', order=2) # Ensure order is set
+                        test_request.status = initial_status
+                        test_request.current_phase = submitted_to_npi_phase
+                        messages.success(request, f"TVF {test_request.tvf_number} created and submitted to NPI!")
                     else: # 'save_draft'
-                        status_name, phase_name, phase_order = 'Draft', 'Project Manager', 1
-                    
-                    test_request.status, _ = TVFStatus.objects.get_or_create(name=status_name)
-                    test_request.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(
-                        name=phase_name, defaults={'order': phase_order}
-                    )
-                    test_request.save() # Save main TestRequest
+                        draft_status, _ = TVFStatus.objects.get_or_create(name='Draft')
+                        pm_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', order=1) # Ensure order is set
+                        test_request.status = draft_status
+                        test_request.current_phase = pm_phase
+                        messages.info(request, f"TVF {test_request.tvf_number} saved as draft.")
 
-                    # Save Plastic Codes
+                    test_request.save()
+
+                    # Save inline formset data (Plastic Codes)
                     plastic_formset.instance = test_request
-                    saved_plastic_codes = plastic_formset.save(commit=False)
-                    for pc_instance in saved_plastic_codes:
-                        if pc_instance.manual_plastic_code and not pc_instance.plastic_code_lookup:
-                            lookup = get_or_create_plastic_code_lookup(
-                                test_request.customer, test_request.project,
-                                test_request.tvf_environment, pc_instance.manual_plastic_code
-                            )
-                            if lookup:
-                                pc_instance.plastic_code_lookup = lookup
-                                pc_instance.manual_plastic_code = None
-                        pc_instance.save()
-                    plastic_formset.save_m2m()
-
-                    # Save Input Files and their nested PANs
-                    for i, iff_form in enumerate(input_file_formset.forms):
-                        if iff_form.cleaned_data.get('DELETE'):
-                            if iff_form.instance.pk: iff_form.instance.delete()
+                    for p_form in plastic_formset.forms:
+                        if p_form.instance.pk and p_form.cleaned_data.get('DELETE'): # Existing and marked for deletion
+                            p_form.instance.delete()
                             continue
-                        
-                        # Only save if form has data or is an initial form that's not empty and not deleted
-                        if iff_form.has_changed() or (not iff_form.instance.pk and any(val for name, val in iff_form.cleaned_data.items() if name != 'DELETE')):
-                            input_file_instance = iff_form.save(commit=False)
-                            input_file_instance.test_request = test_request
-                            input_file_instance.save()
+                        if p_form.has_changed() or not p_form.instance.pk: # New or changed form
+                            plastic_code_lookup = p_form.cleaned_data.get('plastic_code_lookup')
+                            manual_plastic_code = p_form.cleaned_data.get('manual_plastic_code')
+                            if plastic_code_lookup:
+                                p_form.instance.plastic_code_lookup = plastic_code_lookup
+                                p_form.instance.manual_plastic_code = None
+                            elif manual_plastic_code:
+                                p_form.instance.manual_plastic_code = manual_plastic_code
+                                p_form.instance.plastic_code_lookup = None
+                            p_form.instance.test_request = test_request
+                            p_form.save()
+                    # No need for save_m2m for plastic_codes, it's not a M2M relationship here
 
-                            if i < len(processed_pans_formsets):
-                                pan_fs_to_save = processed_pans_formsets[i]
-                                pan_fs_to_save.instance = input_file_instance
-                                saved_pans = pan_fs_to_save.save(commit=False)
-                                for pan_instance in saved_pans:
-                                    if pan_instance.manual_plastic_code_for_pan and not pan_instance.plastic_code_lookup:
-                                        pan_lookup = get_or_create_plastic_code_lookup(
-                                            test_request.customer, test_request.project,
-                                            test_request.tvf_environment, pan_instance.manual_plastic_code_for_pan
-                                        )
-                                        if pan_lookup:
-                                            pan_instance.plastic_code_lookup = pan_lookup
-                                            pan_instance.manual_plastic_code_for_pan = None
-                                    # pan_instance.test_request_input_file is set by formset
-                                    pan_instance.save()
-                                pan_fs_to_save.save_m2m()
-                    
-                    # Save Shipping Details
-                    shipping_instance = shipping_form.save(commit=False)
-                    shipping_instance.test_request = test_request
-                    shipping_instance.save()
+                    # Save Input Files and nested PANs
+                    for i, input_file_form in enumerate(input_file_formset.forms):
+                        if input_file_form.instance.pk and input_file_form.cleaned_data.get('DELETE'): # Existing and marked for deletion
+                            input_file_form.instance.delete()
+                            continue
+                        if input_file_form.has_changed() or not input_file_form.instance.pk: # New or changed form
+                            input_file = input_file_form.save(commit=False)
+                            input_file.test_request = test_request
+                            input_file.save() # Save input file first to get its PK
 
-                messages.success(request, f"TVF {test_request.tvf_number} ({status_name}) processed successfully!")
-                return redirect('test_requests:detail', pk=test_request.pk)
+                            # Now save nested PANs (only if corresponding pan_formset exists and is valid)
+                            if i < len(pans_formsets): # Ensure the index is valid
+                                pan_fs = pans_formsets[i]
+                                pan_fs.instance = input_file # Link PAN formset to current input_file
+                                for pan_form in pan_fs.forms:
+                                    if pan_form.instance.pk and pan_form.cleaned_data.get('DELETE'):
+                                        pan_form.instance.delete()
+                                        continue
+                                    if pan_form.has_changed() or not pan_form.instance.pk:
+                                        pan_form.instance.test_request_input_file = input_file
+                                        pan_form.save()
+                                # No need for pan_fs.save() directly as we iterate and save individual forms
+                    # No need for input_file_formset.save_m2m()
 
+                    # Save Shipping details (OneToOne)
+                    shipping = shipping_form.save(commit=False)
+                    shipping.test_request = test_request
+                    shipping.save()
+
+                if action == 'submit':
+                    return redirect('test_requests:coach_dashboard')
+                else: # 'save_draft'
+                    return redirect('test_requests:create_tvf') # Redirect back to the form
             except Exception as e:
-                messages.error(request, f"Error processing Test Request: {e}")
+                messages.error(request, f"Error creating Test Request: {e}")
                 import traceback
                 traceback.print_exc()
         else:
-            error_messages = ["Please correct the errors below."]
-            if not is_valid_main_form: error_messages.append("Main form has errors.")
-            if not is_valid_plastic: error_messages.append("Plastic Codes section has errors.")
-            if not is_valid_input_files: error_messages.append("Input Files section has errors.")
-            if not is_valid_shipping: error_messages.append("Shipping Details section has errors.")
-            if not all_pan_formsets_valid: error_messages.append("PANs section has errors.")
-            messages.error(request, " ".join(error_messages))
-            # Fall through to render, processed_pans_formsets will be used
+            messages.error(request, "Please correct the errors below.")
+            # If main form or any formsets are invalid, they will contain errors and be re-rendered.
+            # We need to ensure pans_formsets are correctly populated with submitted data and errors
+            # for re-rendering.
+            re_pans_formsets = []
+            for i, input_file_form in enumerate(input_file_formset.forms):
+                prefix = f'input_files-{i}-pans'
+                # If input_file_form is an existing instance, pass it. Otherwise, None.
+                instance = input_file_form.instance if input_file_form.instance.pk else None
+                # Pass request.POST data for validation on re-render
+                pan_fs = PanInlineFormSet(request.POST, instance=instance, prefix=prefix)
+                re_pans_formsets.append(pan_fs)
+            pans_formsets = re_pans_formsets # Update pans_formsets with the re-populated ones
 
     else: # GET request
         form = TestRequestForm(initial={'tvf_initiator': request.user, 'request_received_date': timezone.now().strftime('%Y-%m-%dT%H:%M')})
-        plastic_formset = PlasticCodeFormSet(prefix='plastic_codes', form_kwargs=form_kwargs_for_dependents)
+        plastic_formset = PlasticCodeFormSet(prefix='plastic_codes')
         input_file_formset = InputFileFormSet(prefix='input_files')
-        shipping_form = TestRequestShippingForm(prefix='shipping', **form_kwargs_for_dependents)
+        shipping_form = TestRequestShippingForm(prefix='shipping')
         
-        processed_pans_formsets = []
-        for i in range(input_file_formset.initial_form_count() + input_file_formset.extra):
-            pan_prefix = f'{input_file_formset.prefix}-{i}-pans'
-            processed_pans_formsets.append(PanInlineFormSet(prefix=pan_prefix, form_kwargs=form_kwargs_for_dependents))
+        # Initialize empty nested PAN formsets for each input file form (for GET)
+        pans_formsets = []
+        for i in range(input_file_formset.total_form_count()):
+            prefix = f'input_files-{i}-pans'
+            pans_formsets.append(PanInlineFormSet(prefix=prefix))
 
     context = {
         'form': form,
         'plastic_formset': plastic_formset,
         'input_file_formset': input_file_formset,
-        'pans_formsets': processed_pans_formsets, # This is a list of PanInlineFormSet instances
+        'pans_formsets': pans_formsets, # Pass the list of PAN formsets
         'shipping_form': shipping_form,
-        'role': 'Project Manager - Create TVF' # Assuming 'role' is for display
+        'role': 'Project Manager - Create TVF'
     }
     return render(request, 'test_requests/pm_create_tvf.html', context)
-
 
 
 # --- NPI View: Update Data Processing Status ---
