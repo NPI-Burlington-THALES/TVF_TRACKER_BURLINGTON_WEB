@@ -695,41 +695,36 @@
                 const totalFormsInput = document.getElementById(totalFormsId);
                 let currentForms = parseInt(totalFormsInput.value);
 
-                const emptyFormTemplate = $('#' + emptyFormHtmlId); // Use jQuery to get the template
-                if (!emptyFormTemplate.length) { // Check if element was found
-                    console.error("Error: Template with ID '" + emptyFormHtmlId + "' not found. Cannot add formset row.");
-                    return; 
-                }
-                // Get innerHTML from jQuery object, then replace __prefix__
-                const newRowContentHtml = emptyFormTemplate.html().replace(/__prefix__/g, currentForms);
-                const newRowElement = $(newRowContentHtml); // Convert HTML string back to jQuery object
-
-                container.appendChild(newRowElement[0]); // Append the DOM element from jQuery object
+                const emptyFormTemplate = document.getElementById(emptyFormHtmlId);
+                // Important: Clone the template content, not the template itself, to ensure scripts inside are parsed once added to DOM.
+                const newRowContent = $(emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms));
+                
+                // Append the cloned content to the container
+                container.appendChild(newRowContent[0]); // Append the new row wrapper
 
                 totalFormsInput.value = currentForms + 1;
 
                 // Re-initialize any date/time inputs if they are type="datetime-local" in the new row
-                newRowElement.find('input[type="datetime-local"]').val(''); 
+                newRowContent.find('input[type="datetime-local"]').val('');
 
                 // If adding a plastic code row, update its options
                 if (formsetType === 'plastic-code') {
-                    const newPlasticCodeSelect = newRowElement.find('select[id$="-plastic_code_lookup"]')[0]; // Find within newRowElement
+                    const newPlasticCodeSelect = newRowContent.find('select[id$="-plastic_code_lookup"]')[0];
                     if (newPlasticCodeSelect) {
                         updatePlasticCodeOptions(newPlasticCodeSelect);
                     }
                 }
                 // If adding an input file row, initialize its nested PAN formset
                 else if (formsetType === 'input-file') {
-                    const panNestedContainer = newRowElement.find('.nested-formset-container'); // Find within newRowElement
+                    const panNestedContainer = newRowContent.find('.nested-formset-container');
                     if (panNestedContainer.length) {
                         const nestedTotalFormsInput = panNestedContainer.find('input[id$="-TOTAL_FORMS"]');
-                        nestedTotalFormsInput.val(1);
+                        nestedTotalFormsInput.val(1); // Initialize with 1 empty form for PANs
                         
                         const emptyPanFormTemplate = document.getElementById('empty-pan-form');
-                        const initialPanRowContentHtml = emptyPanFormTemplate.innerHTML.replace(/__prefix__/g, 0); // Correctly get HTML
-                        const initialPanRowElement = $(initialPanRowContentHtml); // Convert HTML string to jQuery object
+                        const initialPanRowContent = $(emptyPanFormTemplate.innerHTML.replace(/__prefix__/g, 0));
                         
-                        panNestedContainer.append(initialPanRowElement[0]); // Append the DOM element
+                        panNestedContainer.append(initialPanRowContent[0]);
                     }
                 }
             }
@@ -751,12 +746,9 @@
                 let currentForms = parseInt(totalFormsInput.val());
 
                 const emptyFormTemplate = document.getElementById('empty-pan-form');
-                const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
+                const newRowContent = $(emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms));
                 
-                const newRowWrapper = $('<div>').html(newRowHtml); // Create a new jQuery wrapper
-                const newRow = newRowWrapper.children().first(); // Get the actual row element
-
-                $(container).append(newRow); // Append the new row wrapper
+                $(container).append(newRowContent[0]); // Append the new row wrapper
                 totalFormsInput.val(currentForms + 1);
             }
 

@@ -331,12 +331,12 @@
                         {% if formset_form.DELETE %}
                             <input type="checkbox" name="{{ formset_form.DELETE.html_name }}" id="{{ formset_form.DELETE.id_for_label }}" class="hidden">
                         {% else %}
-                            <button type="button" class="delete-button delete-formset-row-btn">Delete</button> {# Added class, removed onclick #}
+                            <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete</button>
                         {% endif %}
                     </div>
                 {% endfor %}
             </div>
-            <button type="button" class="add-row-button" id="add-plastic-code-btn">Add Another Plastic Code</button> {# Added id, removed onclick #}
+            <button type="button" class="add-row-button" onclick="addFormsetRow('plastic-code')">Add Another Plastic Code</button>
 
             <h2 class="text-2xl font-semibold text-gray-700 mt-8 mb-4">Input Files & Workorders</h2>
             <div id="input-file-formset-container">
@@ -393,9 +393,9 @@
                             {% if input_file_form.pin_qty.errors %}<ul class="errorlist">{{ input_file_form.pin_qty.errors }}</ul>{% endif %}
                         </div>
                         {% if input_file_form.DELETE %}
-                            <input type="checkbox" name="{{ input_file_form.DELETE.html_name }}" id="{{ input_file_form.DELETE.id_for_forloop.counter0 }}" class="hidden">
+                            <input type="checkbox" name="{{ input_file_form.DELETE.html_name }}" id="{{ input_file_form.DELETE.id_for_label }}" class="hidden">
                         {% else %}
-                            <button type="button" class="delete-button delete-formset-row-btn">Delete Input File</button> {# Added class, removed onclick #}
+                            <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete Input File</button>
                         {% endif %}
 
                         {# Nested PAN Formset for this Input File #}
@@ -420,19 +420,20 @@
                                             {% if pan_form.is_available.errors %}<ul class="errorlist">{{ pan_form.is_available.errors }}</ul>{% endif %}
                                         </div>
                                         {% if pan_form.DELETE %}
-                                            <input type="checkbox" name="{{ pan_form.DELETE.html_name }}" id="{{ pan_form.DELETE.id_for_forloop.counter0 }}" class="hidden">
+                                            <input type="checkbox" name="{{ pan_form.DELETE.html_name }}" id="{{ pan_form.DELETE.id_for_label }}" class="hidden">
                                         {% else %}
-                                            <button type="button" class="delete-button delete-nested-formset-row-btn">Delete PAN</button> {# Added class, removed onclick #}
+                                            <button type="button" class="delete-button" onclick="deleteNestedFormsetRow(this)">Delete PAN</button>
                                         {% endif %}
                                     </div>
                                 {% endfor %}
-                                <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600 add-nested-formset-row-btn" data-formset-prefix="input_files-{{ forloop.counter0 }}-pans">Add Another PAN</button> {# Added class and data-attribute, removed onclick #}
+                                <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600" 
+                                    onclick="addNestedFormsetRow(this, 'input_files-{{ forloop.counter0 }}-pans')">Add Another PAN</button>
                             {% endwith %}
                         </div>
                     </div>
                 {% endfor %}
             </div>
-            <button type="button" class="add-row-button" id="add-input-file-btn">Add Another Input File</button> {# Added id, removed onclick #}
+            <button type="button" class="add-row-button" onclick="addFormsetRow('input-file')">Add Another Input File</button>
 
 
             {# Shipping Details #}
@@ -490,7 +491,7 @@
                     <label for="{{ shipping_form.ship_to_postal_code.id_for_label }}" class="form-label">{{ shipping_form.ship_to_postal_code.label }}:</label>
                     {{ shipping_form.ship_to_postal_code }}
                     {% if shipping_form.ship_to_postal_code.help_text %}<p class="helptext">{{ shipping_form.ship_to_postal_code.help_text }}</p>{% endif %}
-                    {% if shipping.form.ship_to_postal_code.errors %}<ul class="errorlist">{{ shipping_form.ship_to_postal_code.errors }}</ul>{% endif %}
+                    {% if shipping_form.ship_to_postal_code.errors %}<ul class="errorlist">{{ shipping_form.ship_to_postal_code.errors }}</ul>{% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ shipping_form.ship_to_country.id_for_label }}" class="form-label">{{ shipping_form.ship_to_country.label }}:</label>
@@ -519,9 +520,195 @@
     {% load custom_filters %} 
 
     {# JavaScript for Dynamic Formset Management #}
+    <script>
+        function addFormsetRow(formsetType) {
+            let containerId = '';
+            let totalFormsId = '';
+            let emptyFormHtmlId = '';
+            let formsetPrefix = '';
+
+            if (formsetType === 'plastic-code') {
+                containerId = 'plastic-code-formset-container';
+                totalFormsId = 'id_plastic_codes-TOTAL_FORMS';
+                emptyFormHtmlId = 'empty-plastic-code-form';
+                formsetPrefix = 'plastic_codes';
+            } else if (formsetType === 'input-file') {
+                containerId = 'input-file-formset-container';
+                totalFormsId = 'id_input_files-TOTAL_FORMS';
+                emptyFormHtmlId = 'empty-input-file-form';
+                formsetPrefix = 'input_files';
+            } else {
+                console.error('Unknown formset type:', formsetType);
+                return;
+            }
+
+            const container = document.getElementById(containerId);
+            const totalFormsInput = document.getElementById(totalFormsId);
+            let currentForms = parseInt(totalFormsInput.value);
+
+            const emptyFormTemplate = document.getElementById(emptyFormHtmlId);
+            const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
+            
+            const newRowWrapper = document.createElement('div');
+            newRowWrapper.innerHTML = newRowHtml;
+            const newRow = newRowWrapper.firstElementChild; // Get the actual row element
+
+            // Re-initialize any date/time inputs if they are type="datetime-local"
+            newRow.querySelectorAll('input[type="datetime-local"]').forEach(input => {
+                input.value = ''; // Clear previous value
+            });
+
+            container.appendChild(newRow);
+            totalFormsInput.value = currentForms + 1;
+
+            // Add delete button functionality to the new row
+            const deleteButton = newRow.querySelector('.delete-button');
+            if (deleteButton) {
+                deleteButton.onclick = function() { deleteFormsetRow(this); };
+            }
+
+            // If adding a plastic code row, update its options
+            if (formsetType === 'plastic-code') {
+                const newPlasticCodeSelect = newRow.querySelector('select[id$="-plastic_code_lookup"]');
+                if (newPlasticCodeSelect) {
+                    updatePlasticCodeOptions(newPlasticCodeSelect);
+                }
+            }
+            // If adding an input file row, initialize its nested PAN formset
+            else if (formsetType === 'input-file') {
+                const panNestedContainer = newRow.querySelector('.nested-formset-container');
+                if (panNestedContainer) {
+                    const nestedTotalFormsInput = panNestedContainer.querySelector('input[id$="-TOTAL_FORMS"]');
+                    nestedTotalFormsInput.value = 1; // Initialize with 1 empty form for PANs
+                    
+                    const emptyPanFormTemplate = document.getElementById('empty-pan-form');
+                    const initialPanRowHtml = emptyPanFormTemplate.innerHTML.replace(/__prefix__/g, 0); // Start with prefix 0 for the first PAN form
+                    
+                    const panRowWrapper = document.createElement('div');
+                    panRowWrapper.innerHTML = initialPanRowHtml;
+                    const panRow = panRowWrapper.firstElementChild;
+                    panNestedContainer.appendChild(panRow);
+
+                    // Re-enable delete button for nested PANs
+                    const deletePanButton = panRow.querySelector('.delete-button');
+                    if (deletePanButton) {
+                        deletePanButton.onclick = function() { deleteNestedFormsetRow(this); };
+                    }
+                }
+            }
+        }
+
+        function deleteFormsetRow(button) {
+            const row = button.closest('.inline-formset-row');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.style.display = 'none'; // Hide the row instead of removing it
+            } else {
+                row.remove(); // Fallback if no DELETE checkbox (shouldn't happen with inlineformset_factory)
+            }
+        }
+
+        function addNestedFormsetRow(button, formsetPrefix) {
+            const container = button.previousElementSibling; // The container div holding the nested forms
+            const totalFormsInput = container.querySelector(`input[name="${formsetPrefix}-TOTAL_FORMS"]`);
+            let currentForms = parseInt(totalFormsInput.value);
+
+            const emptyFormTemplate = document.getElementById('empty-pan-form');
+            const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
+            
+            const newRowWrapper = document.createElement('div');
+            newRowWrapper.innerHTML = newRowHtml;
+            const newRow = newRowWrapper.firstElementChild;
+
+            container.appendChild(newRow);
+            totalFormsInput.value = currentForms + 1;
+
+            const deleteButton = newRow.querySelector('.delete-button');
+            if (deleteButton) {
+                deleteButton.onclick = function() { deleteNestedFormsetRow(this); };
+            }
+        }
+
+        function deleteNestedFormsetRow(button) {
+            const row = button.closest('.nested-formset-row');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
+            if (deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.style.display = 'none';
+            } else {
+                row.remove();
+            }
+        }
+    </script>
+
+    {# Empty form templates for JavaScript to clone #}
+    <div style="display: none;">
+        {# Plastic Code Empty Form #}
+        <div id="empty-plastic-code-form">
+            <div class="inline-formset-row">
+                {% for field in plastic_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete</button>
+            </div>
+        </div>
+
+        {# Input File Empty Form #}
+        <div id="empty-input-file-form">
+            <div class="inline-formset-row">
+                {% for field in input_file_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteFormsetRow(this)">Delete Input File</button>
+
+                {# Nested PAN Formset for an empty Input File #}
+                <div class="nested-formset-container w-full">
+                    <h3 class="text-xl font-semibold text-gray-600 mb-3">PANs for New File</h3>
+                    {# This needs a dynamically named management form #}
+                    {# The actual management form for the empty form will be rendered by pan_formset.management_form when it's initially created for the first input_file_form #}
+                    {# For newly added input_file_forms by JS, we need to manually insert its management form with the correct prefix #}
+                    <input type="hidden" name="input_files-__prefix__-pans-TOTAL_FORMS" id="id_input_files-__prefix__-pans-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-INITIAL_FORMS" id="id_input_files-__prefix__-pans-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MIN_NUM_FORMS" id="id_input_files-__prefix__-pans-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MAX_NUM_FORMS" id="id_input_files-__prefix__-pans-MAX_NUM_FORMS" value="1000">
+                    
+                    {# The button for adding new PANs inside this new input file #}
+                    <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600" 
+                        onclick="addNestedFormsetRow(this, 'input_files-__prefix__-pans')">Add Another PAN</button>
+                </div>
+            </div>
+        </div>
+
+        {# PAN Empty Form (for nested formset) #}
+        <div id="empty-pan-form">
+            <div class="nested-formset-row">
+                {% for field in pans_formsets.0.empty_form %} {# Use .0 to get the first formset's empty_form #}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button" onclick="deleteNestedFormsetRow(this)">Delete PAN</button>
+            </div>
+        </div>
+    </div>
+
+    {# JavaScript for Dynamic Dropdowns #}
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        // All functions and event listeners are now within this single $(document).ready block.
         $(document).ready(function() {
             const customerSelect = $('#id_customer');
             const environmentSelect = $('#id_tvf_environment');
@@ -529,10 +716,6 @@
             const trustportFolderSelect = $('#id_trustport_folder_actual');
             const dispatchMethodSelect = $('#id_shipping-dispatch_method');
             const plasticCodeLookupContainer = $('#plastic-code-formset-container');
-            const requestReceivedDateInput = $('#id_request_received_date');
-            const requestShipDateInput = $('#id_request_ship_date');
-
-            // --- Function Definitions ---
 
             function updateProjectOptions() {
                 const customerId = customerSelect.val();
@@ -610,37 +793,56 @@
                 }
             }
 
-            function updatePlasticCodeOptions(selectElement) {
+            function updateAllPlasticCodeOptions() {
                 const customerId = customerSelect.val();
                 const projectId = projectSelect.val();
-                const environmentId = environmentSelect.val();
+                const environmentId = environmentSelect.val(); // <--- Get environment ID here
 
-                $(selectElement).empty().append($('<option></option>').attr('value', '').text('Select Plastic Code (if in lookup)'));
-
-                if (customerId && projectId && environmentId) {
-                    $.ajax({
-                        url: '{% url "test_requests:get_filtered_plastic_codes" %}',
-                        data: {
-                            'customer_id': customerId,
-                            'project_id': projectId,
-                            'environment_id': environmentId
-                        },
-                        success: function(data) {
-                            $.each(data.plastic_codes, function(key, value) {
-                                $(selectElement).append($('<option></option>').attr('value', value.id).text(value.code));
-                            });
-                        }
-                    });
-                }
-            }
-
-            function updateAllPlasticCodeOptions() {
-                // Select all current plastic code dropdowns, including newly added ones
                 const plasticCodeLookupSelects = plasticCodeLookupContainer.find('select[id$="-plastic_code_lookup"]');
+
                 plasticCodeLookupSelects.each(function() {
-                    updatePlasticCodeOptions(this);
+                    const currentPlasticCodeSelect = $(this);
+                    currentPlasticCodeSelect.empty().append($('<option></option>').attr('value', '').text('Select Plastic Code (if in lookup)'));
+
+                    if (customerId && projectId && environmentId) { // <--- Update condition
+                        $.ajax({
+                            url: '{% url "test_requests:get_filtered_plastic_codes" %}',
+                            data: {
+                                'customer_id': customerId,
+                                'project_id': projectId,
+                                'environment_id': environmentId // <--- Pass environment ID here
+                            },
+                            success: function(data) {
+                                $.each(data.plastic_codes, function(key, value) {
+                                    currentPlasticCodeSelect.append($('<option></option>').attr('value', value.id).text(value.code));
+                                });
+                            }
+                        });
+                    }
                 });
             }
+
+            // Event listeners
+            customerSelect.change(updateProjectOptions);
+            environmentSelect.change(updateProjectOptions);
+            projectSelect.change(updateDependentOptions);
+
+            // Initial load
+            if (customerSelect.val() && environmentSelect.val()) {
+                updateProjectOptions();
+            } else {
+                projectSelect.empty().append($('<option></option>').attr('value', '').text('Select Project'));
+                trustportFolderSelect.empty().append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
+                dispatchMethodSelect.empty().append($('<option></option>').attr('value', '').text('Select Dispatch Method'));
+                updateAllPlasticCodeOptions();
+            }
+        });
+
+        // Function to calculate Request Ship Date based on SLA
+        $(document).ready(function() {
+            const requestReceivedDateInput = $('#id_request_received_date');
+            const requestShipDateInput = $('#id_request_ship_date');
+            const customerSelect = $('#id_customer');
 
             function calculateShipDate() {
                 const receivedDateStr = requestReceivedDateInput.val();
@@ -670,149 +872,14 @@
                 }
             }
 
-            function addFormsetRow(formsetType) {
-                let containerId = '';
-                let totalFormsId = '';
-                let emptyFormHtmlId = '';
-                let formsetPrefix = '';
-
-                if (formsetType === 'plastic-code') {
-                    containerId = 'plastic-code-formset-container';
-                    totalFormsId = 'id_plastic_codes-TOTAL_FORMS';
-                    emptyFormHtmlId = 'empty-plastic-code-form';
-                    formsetPrefix = 'plastic_codes';
-                } else if (formsetType === 'input-file') {
-                    containerId = 'input-file-formset-container';
-                    totalFormsId = 'id_input_files-TOTAL_FORMS';
-                    emptyFormHtmlId = 'empty-input-file-form';
-                    formsetPrefix = 'input_files';
-                } else {
-                    console.error('Unknown formset type:', formsetType);
-                    return;
-                }
-
-                const container = document.getElementById(containerId);
-                const totalFormsInput = document.getElementById(totalFormsId);
-                let currentForms = parseInt(totalFormsInput.value);
-
-                const emptyFormTemplate = $('#' + emptyFormHtmlId); // Use jQuery to get the template
-                if (!emptyFormTemplate.length) { // Check if element was found
-                    console.error("Error: Template with ID '" + emptyFormHtmlId + "' not found. Cannot add formset row.");
-                    return; 
-                }
-                // Get innerHTML from jQuery object, then replace __prefix__
-                const newRowContentHtml = emptyFormTemplate.html().replace(/__prefix__/g, currentForms);
-                const newRowElement = $(newRowContentHtml); // Convert HTML string back to jQuery object
-
-                container.appendChild(newRowElement[0]); // Append the DOM element from jQuery object
-
-                totalFormsInput.value = currentForms + 1;
-
-                // Re-initialize any date/time inputs if they are type="datetime-local" in the new row
-                newRowElement.find('input[type="datetime-local"]').val(''); 
-
-                // If adding a plastic code row, update its options
-                if (formsetType === 'plastic-code') {
-                    const newPlasticCodeSelect = newRowElement.find('select[id$="-plastic_code_lookup"]')[0]; // Find within newRowElement
-                    if (newPlasticCodeSelect) {
-                        updatePlasticCodeOptions(newPlasticCodeSelect);
-                    }
-                }
-                // If adding an input file row, initialize its nested PAN formset
-                else if (formsetType === 'input-file') {
-                    const panNestedContainer = newRowElement.find('.nested-formset-container'); // Find within newRowElement
-                    if (panNestedContainer.length) {
-                        const nestedTotalFormsInput = panNestedContainer.find('input[id$="-TOTAL_FORMS"]');
-                        nestedTotalFormsInput.val(1);
-                        
-                        const emptyPanFormTemplate = document.getElementById('empty-pan-form');
-                        const initialPanRowContentHtml = emptyPanFormTemplate.innerHTML.replace(/__prefix__/g, 0); // Correctly get HTML
-                        const initialPanRowElement = $(initialPanRowContentHtml); // Convert HTML string to jQuery object
-                        
-                        panNestedContainer.append(initialPanRowElement[0]); // Append the DOM element
-                    }
-                }
-            }
-
-            function deleteFormsetRow(button) {
-                const row = button.closest('.inline-formset-row');
-                const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                if (deleteCheckbox) {
-                    deleteCheckbox.checked = true;
-                    $(row).hide(); // Use jQuery hide for consistency
-                } else {
-                    $(row).remove(); // Use jQuery remove
-                }
-            }
-
-            function addNestedFormsetRow(button, formsetPrefix) {
-                const container = $(button).prev('.nested-formset-container')[0]; // Get the actual DOM element
-                const totalFormsInput = $(container).find(`input[name="${formsetPrefix}-TOTAL_FORMS"]`);
-                let currentForms = parseInt(totalFormsInput.val());
-
-                const emptyFormTemplate = document.getElementById('empty-pan-form');
-                const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, currentForms);
-                
-                const newRowWrapper = $('<div>').html(newRowHtml); // Create a new jQuery wrapper
-                const newRow = newRowWrapper.children().first(); // Get the actual row element
-
-                $(container).append(newRow); // Append the new row wrapper
-                totalFormsInput.val(currentForms + 1);
-            }
-
-            function deleteNestedFormsetRow(button) {
-                const row = button.closest('.nested-formset-row');
-                const deleteCheckbox = row.querySelector('input[type="checkbox"][id$="-DELETE"]');
-                if (deleteCheckbox) {
-                    deleteCheckbox.checked = true;
-                    $(row).hide();
-                } else {
-                    $(row).remove();
-                }
-            }
-
-            // --- Event Listeners ---
-            customerSelect.on('change', updateProjectOptions);
-            environmentSelect.on('change', updateProjectOptions);
-            projectSelect.on('change', updateDependentOptions);
             requestReceivedDateInput.on('change', calculateShipDate);
             customerSelect.on('change', calculateShipDate);
 
-            // Event listeners for "Add" buttons (using IDs)
-            $('#add-plastic-code-btn').on('click', function() {
-                addFormsetRow('plastic-code');
-            });
-            $('#add-input-file-btn').on('click', function() {
-                addFormsetRow('input-file');
-            });
-
-            // Event delegation for "Delete" and "Add Nested" buttons (as they are added dynamically)
-            $(document).on('click', '.delete-formset-row-btn', function() {
-                deleteFormsetRow(this);
-            });
-            $(document).on('click', '.add-nested-formset-row-btn', function() {
-                const formsetPrefix = $(this).data('formset-prefix'); // Get prefix from data attribute
-                addNestedFormsetRow(this, formsetPrefix);
-            });
-            $(document).on('click', '.delete-nested-formset-row-btn', function() {
-                deleteNestedFormsetRow(this);
-            });
-
-            // --- Initial Load Logic ---
-            // Trigger initial population of dropdowns based on current selections
-            if (customerSelect.val() && environmentSelect.val()) {
-                updateProjectOptions();
-            } else {
-                projectSelect.empty().append($('<option></option>').attr('value', '').text('Select Project'));
-                trustportFolderSelect.empty().append($('<option></option>').attr('value', '').text('Select Trustport Folder'));
-                dispatchMethodSelect.empty().append($('<option></option>').attr('value', '').text('Select Dispatch Method'));
-                updateAllPlasticCodeOptions(); // Call initially to set up empty plastic code forms as well
-            }
             if (requestReceivedDateInput.val() && customerSelect.val()) {
                 calculateShipDate();
             } else if (requestReceivedDateInput.val()) {
                  requestShipDateInput.val('');
             }
-        }); // End of the single $(document).ready block
+        });
     </script>
 {% endblock %}
