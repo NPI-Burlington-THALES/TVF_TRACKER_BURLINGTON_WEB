@@ -796,18 +796,22 @@
             function updateAllPlasticCodeOptions() {
                 const customerId = customerSelect.val();
                 const projectId = projectSelect.val();
-                
-                // Select all plastic code dropdowns currently in the DOM
+                const environmentId = environmentSelect.val(); // <--- Get environment ID here
+
                 const plasticCodeLookupSelects = plasticCodeLookupContainer.find('select[id$="-plastic_code_lookup"]');
 
                 plasticCodeLookupSelects.each(function() {
                     const currentPlasticCodeSelect = $(this);
                     currentPlasticCodeSelect.empty().append($('<option></option>').attr('value', '').text('Select Plastic Code (if in lookup)'));
 
-                    if (customerId && projectId) {
+                    if (customerId && projectId && environmentId) { // <--- Update condition
                         $.ajax({
                             url: '{% url "test_requests:get_filtered_plastic_codes" %}',
-                            data: { 'customer_id': customerId, 'project_id': projectId },
+                            data: {
+                                'customer_id': customerId,
+                                'project_id': projectId,
+                                'environment_id': environmentId // <--- Pass environment ID here
+                            },
                             success: function(data) {
                                 $.each(data.plastic_codes, function(key, value) {
                                     currentPlasticCodeSelect.append($('<option></option>').attr('value', value.id).text(value.code));

@@ -94,10 +94,13 @@ def get_filtered_projects(request):
 def get_filtered_plastic_codes(request):
     customer_id = request.GET.get('customer_id')
     project_id = request.GET.get('project_id')
+    environment_id = request.GET.get('environment_id') # <--- Add this line
     plastic_codes = []
-    if customer_id and project_id:
+    if customer_id and project_id and environment_id: # <--- Update condition
         plastic_codes_query = PlasticCodeLookup.objects.filter(
-            customer_id=customer_id, project_id=project_id
+            customer_id=customer_id,
+            project_id=project_id,
+            tvf_environment_id=environment_id # <--- Add this line
         ).values('id', 'code').order_by('code')
         plastic_codes = list(plastic_codes_query)
     return JsonResponse({'plastic_codes': plastic_codes})
@@ -176,7 +179,24 @@ def coach_dashboard(request):
 def create_tvf_view(request):
     if request.method == 'POST':
         form = TestRequestForm(request.POST)
-        plastic_formset = PlasticCodeFormSet(request.POST, prefix='plastic_codes')
+        customer_id = None
+        project_id = None
+        if form.is_valid():
+            customer_obj = form.cleaned_data.get('customer')
+            project_obj = form.cleaned_data.get('project')
+            customer_id = customer_obj.id if customer_obj else None
+            project_id = project_obj.id if project_obj else None
+        else:
+            try:
+                customer_id = int(request.POST.get('customer'))
+                project_id = int(request.POST.get('project'))
+            except (TypeError, ValueError):
+                pass
+
+        # Pass customer_id and project_id to the PlasticCodeFormSet
+        plastic_formset = PlasticCodeFormSet(request.POST, prefix='plastic_codes',
+                                             form_kwargs={'customer_id': customer_id, 'project_id': project_id})
+
         # Initialize InputFileFormSet with POST data
         input_file_formset = InputFileFormSet(request.POST, prefix='input_files')
         shipping_form = TestRequestShippingForm(request.POST, prefix='shipping')

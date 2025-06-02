@@ -13,6 +13,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.utils import timezone
 from django.core.exceptions import ValidationError # For custom validation
+from django.db.models import Q # Import Q for complex lookups
+
 
 # Use Django's built-in UserCreationForm for simplicity
 class CustomUserCreationForm(UserCreationForm):
@@ -28,7 +30,7 @@ class TestRequestForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-control'}) # Ensure class is applied
     )
     project = forms.ModelChoiceField(
-        queryset=Project.objects.none(), 
+        queryset=Project.objects.all().order_by('name'), # Changed from Project.objects.none() to Project.objects.all()
         empty_label="Select Project",
         help_text="Select the project for this TVF. (Populated after Customer and Environment)",
         required=True, # Assuming project is always required
@@ -94,7 +96,7 @@ class TestRequestForm(forms.ModelForm):
 
         current_customer_id = None
         current_environment_id = None
-        current_project_id = None # For filtering children of project
+        submitted_project_id = None # Used for filtering trustport folder
 
         if self.is_bound: # Form is submitted with data
             try:
@@ -112,18 +114,29 @@ class TestRequestForm(forms.ModelForm):
             try:
                 project_val = self.data.get('project')
                 if project_val and project_val.isdigit():
-                    current_project_id = int(project_val)
+                    submitted_project_id = int(project_val)
             except (ValueError, TypeError):
                 pass
-        elif self.instance and self.instance.pk: # Form is for an existing instance
+
+        elif self.instance and self.instance.pk: # Form is for an existing instance (GET request)
             current_customer_id = self.instance.customer_id
             current_environment_id = self.instance.tvf_environment_id
-            current_project_id = self.instance.project_id
+            submitted_project_id = self.instance.project_id
 
-        # Populate Trustport Folder queryset (dependent on customer and project)
-        if current_customer_id and current_project_id:
+        # Populate Project queryset (dependent on customer and environment)
+        # This part now *filters* the initially broad queryset.
+        if current_customer_id and current_environment_id:
+            self.fields['project'].queryset = Project.objects.filter(
+                customer_id=current_customer_id, tvf_environment_id=current_environment_id
+            ).order_by('name')
+        # Else: The 'project' queryset remains Project.objects.all() (set in class definition)
+        # This allows ModelChoiceField to validate against all projects, and customer/environment
+        # fields will show their own errors if invalid.
+
+        # Populate Trustport Folder queryset (dependent on customer and *submitted* project)
+        if current_customer_id and submitted_project_id:
             self.fields['trustport_folder_actual'].queryset = TrustportFolder.objects.filter(
-                customer_id=current_customer_id, project_id=current_project_id
+                customer_id=current_customer_id, project_id=submitted_project_id
             ).order_by('folder_path')
         else:
             self.fields['trustport_folder_actual'].queryset = TrustportFolder.objects.none()
@@ -153,6 +166,9 @@ class TestRequestPlasticCodeForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        # Extract customer_id and project_id from kwargs, if provided
+        self.customer_id = kwargs.pop('customer_id', None)
+        self.project_id = kwargs.pop('project_id', None)
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
             if isinstance(field.widget, (forms.TextInput, forms.Textarea, forms.Select, forms.EmailInput, forms.NumberInput)):
@@ -187,10 +203,12 @@ class TestRequestPlasticCodeForm(forms.ModelForm):
             current_customer_id = None
             current_project_id = None
 
-        if current_customer_id and current_project_id:
+        # Dynamically set plastic_code_lookup queryset
+        # Use self.customer_id and self.project_id from kwargs
+        if self.customer_id and self.project_id:
             self.fields['plastic_code_lookup'].queryset = PlasticCodeLookup.objects.filter(
-                customer_id=current_customer_id,
-                project_id=current_project_id
+                customer_id=self.customer_id,
+                project_id=self.project_id
             ).order_by('code')
         else:
             self.fields['plastic_code_lookup'].queryset = PlasticCodeLookup.objects.none()
