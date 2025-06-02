@@ -175,145 +175,159 @@ def coach_dashboard(request):
 @user_passes_test(is_project_manager, login_url='test_requests:access_denied')
 def create_tvf_view(request):
     if request.method == 'POST':
-        input_file_form = TestRequestInputFileForm(request.POST, request.FILES)
+        form = TestRequestForm(request.POST)
         plastic_formset = PlasticCodeFormSet(request.POST, prefix='plastic_codes')
+        # Initialize InputFileFormSet with POST data
         input_file_formset = InputFileFormSet(request.POST, prefix='input_files')
         shipping_form = TestRequestShippingForm(request.POST, prefix='shipping')
 
-        pans_formsets = []
-        # Populate pans_formsets based on submitted input_file_formset
-        for i, input_file_form in enumerate(input_file_formset.forms):
-            # Regardless of validity, if the form is present (not just a placeholder)
-            # and not marked for deletion, try to get its nested formset.
-            # This is crucial for retaining submitted data for re-rendering on errors.
-            if not input_file_form.cleaned_data.get('DELETE', False):
-                prefix = f'input_files-{i}-pans'
-                # Pass instance=input_file_form.instance if it's an existing object (though for create it's new)
-                # For new forms, it will be None.
-                pan_formset = PanInlineFormSet(request.POST, instance=input_file_form.instance, prefix=prefix)
-                pans_formsets.append(pan_formset)
-        
-        # Check overall validity of main form and all formsets
-        is_valid = form.is_valid() and plastic_formset.is_valid() and input_file_formset.is_valid() and shipping_form.is_valid()
-        for pan_fs in pans_formsets:
-            is_valid = is_valid and pan_fs.is_valid()
+        # Validate main form and primary formsets first
+        main_form_is_valid = form.is_valid()
+        plastic_formset_is_valid = plastic_formset.is_valid()
+        # Call is_valid() here to populate cleaned_data for input_file_formset's forms
+        input_file_formset_is_valid = input_file_formset.is_valid()
+        shipping_form_is_valid = shipping_form.is_valid()
 
-        if is_valid:
+        # Initialize pans_formsets; it will be populated based on input_file_formset's state
+        processed_pans_formsets = []
+        all_pan_formsets_valid = True # Assume true initially
+
+        if input_file_formset_is_valid:
+            # If input_file_formset is valid, iterate through its forms to setup PAN formsets
+            for i, iff_form in enumerate(input_file_formset.forms): # iff_form is TestRequestInputFileForm instance
+                # Now it's safe to access iff_form.cleaned_data
+                if not iff_form.cleaned_data.get('DELETE', False):
+                    prefix = f'input_files-{i}-pans'
+                    # Instance for PanInlineFormSet should be iff_form.instance
+                    pan_fs = PanInlineFormSet(request.POST, instance=iff_form.instance, prefix=prefix)
+                    if not pan_fs.is_valid():
+                        all_pan_formsets_valid = False
+                    processed_pans_formsets.append(pan_fs)
+                else:
+                    # If parent (input_file_form) is marked for deletion, add an empty/unbound formset
+                    # or handle as appropriate for your template.
+                    prefix = f'input_files-{i}-pans'
+                    # Create an unbound formset as a placeholder if needed for template consistency
+                    empty_pan_fs = PanInlineFormSet(prefix=prefix)
+                    processed_pans_formsets.append(empty_pan_fs)
+
+        elif request.POST: # input_file_formset is NOT valid, but we have POST data
+            # Rebuild pans_formsets with POST data to show errors and retain values
+            all_pan_formsets_valid = True # Re-evaluate for this case
+            for i, iff_form_unvalidated in enumerate(input_file_formset.forms):
+                prefix = f'input_files-{i}-pans'
+                instance_for_pan = iff_form_unvalidated.instance if iff_form_unvalidated.instance and iff_form_unvalidated.instance.pk else None
+                pan_fs_with_data = PanInlineFormSet(request.POST, instance=instance_for_pan, prefix=prefix)
+                # Call is_valid() to populate errors for re-rendering, and check validity
+                if not pan_fs_with_data.is_valid():
+                     all_pan_formsets_valid = False
+                processed_pans_formsets.append(pan_fs_with_data)
+        
+        # If there were no input_file_formset forms (e.g. extra=0 and no initial forms with POST data)
+        # and it's a POST request, processed_pans_formsets might be empty.
+        # Ensure all_pan_formsets_valid is True if processed_pans_formsets is empty.
+        if not processed_pans_formsets:
+            all_pan_formsets_valid = True
+
+
+        is_overall_valid = (main_form_is_valid and
+                            plastic_formset_is_valid and
+                            input_file_formset_is_valid and
+                            shipping_form_is_valid and
+                            all_pan_formsets_valid)
+
+        if is_overall_valid:
             try:
-                action = request.POST.get('action') # 'save_draft' or 'submit'
                 with transaction.atomic():
                     test_request = form.save(commit=False)
                     test_request.tvf_initiator = request.user
-                    test_request.request_received_date = timezone.now() # Set current time as received date
-
+                    
+                    action = request.POST.get('action')
                     if action == 'submit':
                         initial_status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED')
-                        submitted_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='NPI Data Processing', order=2) # Ensure order is set
+                        # Ensure order is defined for phases in your models or migrations
+                        submitted_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='NPI Data Processing', defaults={'order': 2})
                         test_request.status = initial_status
                         test_request.current_phase = submitted_to_npi_phase
-                        messages.success(request, f"TVF {test_request.tvf_number} created and submitted to NPI!")
                     else: # 'save_draft'
                         draft_status, _ = TVFStatus.objects.get_or_create(name='Draft')
-                        pm_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', order=1) # Ensure order is set
+                        pm_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', defaults={'order': 1})
                         test_request.status = draft_status
                         test_request.current_phase = pm_phase
-                        messages.info(request, f"TVF {test_request.tvf_number} saved as draft.")
+                    
+                    test_request.save() # Save main TestRequest to get ID
 
-                    test_request.save()
-
-                    # Save inline formset data (Plastic Codes)
                     plastic_formset.instance = test_request
-                    for p_form in plastic_formset.forms:
-                        if p_form.instance.pk and p_form.cleaned_data.get('DELETE'): # Existing and marked for deletion
-                            p_form.instance.delete()
-                            continue
-                        if p_form.has_changed() or not p_form.instance.pk: # New or changed form
-                            plastic_code_lookup = p_form.cleaned_data.get('plastic_code_lookup')
-                            manual_plastic_code = p_form.cleaned_data.get('manual_plastic_code')
-                            if plastic_code_lookup:
-                                p_form.instance.plastic_code_lookup = plastic_code_lookup
-                                p_form.instance.manual_plastic_code = None
-                            elif manual_plastic_code:
-                                p_form.instance.manual_plastic_code = manual_plastic_code
-                                p_form.instance.plastic_code_lookup = None
-                            p_form.instance.test_request = test_request
-                            p_form.save()
-                    # No need for save_m2m for plastic_codes, it's not a M2M relationship here
+                    plastic_formset.save()
 
-                    # Save Input Files and nested PANs
+                    # Save Input Files and their nested PANs
                     for i, input_file_form in enumerate(input_file_formset.forms):
-                        if input_file_form.instance.pk and input_file_form.cleaned_data.get('DELETE'): # Existing and marked for deletion
-                            input_file_form.instance.delete()
-                            continue
-                        if input_file_form.has_changed() or not input_file_form.instance.pk: # New or changed form
-                            input_file = input_file_form.save(commit=False)
-                            input_file.test_request = test_request
-                            input_file.save() # Save input file first to get its PK
+                        if input_file_form.cleaned_data.get('DELETE'):
+                            if input_file_form.instance.pk: # Only delete if it's an existing instance
+                                input_file_form.instance.delete()
+                            continue # Skip saving this form and its nested PANs
+                        
+                        # Only save if the form has data or is an initial form that's not empty
+                        if input_file_form.has_changed() or (not input_file_form.instance.pk and any(input_file_form.cleaned_data.values())):
+                            input_file_instance = input_file_form.save(commit=False)
+                            input_file_instance.test_request = test_request
+                            input_file_instance.save() # Save TestRequestInputFile
 
-                            # Now save nested PANs (only if corresponding pan_formset exists and is valid)
-                            if i < len(pans_formsets): # Ensure the index is valid
-                                pan_fs = pans_formsets[i]
-                                pan_fs.instance = input_file # Link PAN formset to current input_file
-                                for pan_form in pan_fs.forms:
-                                    if pan_form.instance.pk and pan_form.cleaned_data.get('DELETE'):
-                                        pan_form.instance.delete()
+                            if i < len(processed_pans_formsets):
+                                pan_fs_to_save = processed_pans_formsets[i] # This formset is already validated
+                                for pan_form_instance in pan_fs_to_save.forms:
+                                    if pan_form_instance.cleaned_data.get('DELETE'):
+                                        if pan_form_instance.instance.pk:
+                                            pan_form_instance.instance.delete()
                                         continue
-                                    if pan_form.has_changed() or not pan_form.instance.pk:
-                                        pan_form.instance.test_request_input_file = input_file
-                                        pan_form.save()
-                                # No need for pan_fs.save() directly as we iterate and save individual forms
-                    # No need for input_file_formset.save_m2m()
-
-                    # Save Shipping details (OneToOne)
+                                    if pan_form_instance.has_changed() or (not pan_form_instance.instance.pk and any(pan_form_instance.cleaned_data.values())):
+                                        pan_item = pan_form_instance.save(commit=False)
+                                        pan_item.test_request_input_file = input_file_instance # Link to parent
+                                        pan_item.save()
+                    
                     shipping = shipping_form.save(commit=False)
                     shipping.test_request = test_request
                     shipping.save()
-
+                
                 if action == 'submit':
+                    messages.success(request, f"TVF {test_request.tvf_number} created and submitted to NPI!")
                     return redirect('test_requests:coach_dashboard')
                 else: # 'save_draft'
-                    return redirect('test_requests:create_tvf') # Redirect back to the form
+                    messages.info(request, f"TVF {test_request.tvf_number} saved as draft.")
+                    # Redirect to detail view of the draft or back to create form
+                    return redirect('test_requests:detail', pk=test_request.pk)
+
+
             except Exception as e:
                 messages.error(request, f"Error creating Test Request: {e}")
                 import traceback
                 traceback.print_exc()
-        else:
-            messages.error(request, "Please correct the errors below.")
-            # If main form or any formsets are invalid, they will contain errors and be re-rendered.
-            # We need to ensure pans_formsets are correctly populated with submitted data and errors
-            # for re-rendering.
-            re_pans_formsets = []
-            for i, input_file_form in enumerate(input_file_formset.forms):
-                prefix = f'input_files-{i}-pans'
-                # If input_file_form is an existing instance, pass it. Otherwise, None.
-                instance = input_file_form.instance if input_file_form.instance.pk else None
-                # Pass request.POST data for validation on re-render
-                pan_fs = PanInlineFormSet(request.POST, instance=instance, prefix=prefix)
-                re_pans_formsets.append(pan_fs)
-            pans_formsets = re_pans_formsets # Update pans_formsets with the re-populated ones
+        else: # Not is_overall_valid
+            messages.error(request, "Please correct the errors below. Check all sections, including PAN entries if applicable.")
+            # Fall through to render the form with errors.
+            # `processed_pans_formsets` will be used in the context.
 
     else: # GET request
         form = TestRequestForm(initial={'tvf_initiator': request.user, 'request_received_date': timezone.now().strftime('%Y-%m-%dT%H:%M')})
         plastic_formset = PlasticCodeFormSet(prefix='plastic_codes')
-        input_file_formset = InputFileFormSet(prefix='input_files')
+        input_file_formset = InputFileFormSet(prefix='input_files') # For GET, these are unbound
         shipping_form = TestRequestShippingForm(prefix='shipping')
         
-        # Initialize empty nested PAN formsets for each input file form (for GET)
-        pans_formsets = []
-        for i in range(input_file_formset.total_form_count()):
+        processed_pans_formsets = [] # For GET, initialize empty PAN formsets
+        # Create one PanInlineFormSet for each form in the input_file_formset (including 'extra' forms)
+        for i in range(input_file_formset.initial_form_count() + input_file_formset.extra):
             prefix = f'input_files-{i}-pans'
-            pans_formsets.append(PanInlineFormSet(prefix=prefix))
+            processed_pans_formsets.append(PanInlineFormSet(prefix=prefix)) # Unbound
 
     context = {
         'form': form,
         'plastic_formset': plastic_formset,
         'input_file_formset': input_file_formset,
-        'pans_formsets': pans_formsets, # Pass the list of PAN formsets
+        'pans_formsets': processed_pans_formsets, # Use this consistent variable name
         'shipping_form': shipping_form,
         'role': 'Project Manager - Create TVF'
     }
     return render(request, 'test_requests/pm_create_tvf.html', context)
-
 
 # --- NPI View: Update Data Processing Status ---
 @login_required

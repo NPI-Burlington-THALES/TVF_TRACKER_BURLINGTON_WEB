@@ -24,12 +24,15 @@ class TestRequestForm(forms.ModelForm):
     customer = forms.ModelChoiceField(
         queryset=Customer.objects.all().order_by('name'),
         empty_label="Select Customer",
-        help_text="Select the customer for this TVF."
+        help_text="Select the customer for this TVF.",
+        widget=forms.Select(attrs={'class': 'form-control'}) # Ensure class is applied
     )
     project = forms.ModelChoiceField(
-        queryset=Project.objects.none(), # Initially empty, populated by JS
+        queryset=Project.objects.none(), 
         empty_label="Select Project",
-        help_text="Select the project for this TVF. (Note: Projects are linked to Customers and Environments)"
+        help_text="Select the project for this TVF. (Populated after Customer and Environment)",
+        required=True, # Assuming project is always required
+        widget=forms.Select(attrs={'class': 'form-control'}) # Ensure class is applied
     )
     tvf_type = forms.ModelChoiceField(
         queryset=TVFType.objects.all().order_by('name'),
@@ -39,7 +42,8 @@ class TestRequestForm(forms.ModelForm):
     tvf_environment = forms.ModelChoiceField(
         queryset=TVFEnvironment.objects.all().order_by('name'),
         empty_label="Select TVF Environment",
-        help_text="Select the environment for this TVF."
+        help_text="Select the environment for this TVF.",
+        widget=forms.Select(attrs={'class': 'form-control'}) # Ensure class is applied
     )
     
     request_received_date = forms.DateTimeField(
@@ -54,17 +58,18 @@ class TestRequestForm(forms.ModelForm):
     )
 
     trustport_folder_actual = forms.ModelChoiceField(
-        queryset=TrustportFolder.objects.none(), # Initially empty, populated by JS
+        queryset=TrustportFolder.objects.none(),
         empty_label="Select Trustport Folder",
-        required=False, 
-        help_text="Actual Trustport folder used for this specific TVF."
+        required=False,
+        help_text="Actual Trustport folder used (Populated after Project selection).",
+        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
     class Meta:
         model = TestRequest
         fields = [
-            'cr_number', 'customer', 'project', 'tvf_name',
-            'tvf_type', 'tvf_environment', 'tvf_pin_mailer', 'run_today',
+            'cr_number', 'customer', 'tvf_environment', 'project', 'tvf_name', # Ensure order allows JS to find customer/env first
+            'tvf_type', 'tvf_pin_mailer', 'run_today',
             'request_received_date', 'request_ship_date', 
             's_code', 'd_code', 'comments',
             'trustport_folder_actual', 'pres_config_version', 'proc_config_version', 'pin_config_version',
@@ -73,56 +78,52 @@ class TestRequestForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Apply form-control class to all text/select/number/date inputs
+        # Apply form-control class to all visible fields for consistent styling
         for field_name, field in self.fields.items():
-            if isinstance(field.widget, (forms.TextInput, forms.Textarea, forms.Select, forms.EmailInput, forms.NumberInput, forms.DateTimeInput)):
-                field.widget.attrs.update({'class': 'form-control'})
-            elif isinstance(field.widget, forms.CheckboxInput):
-                field.widget.attrs.update({'class': 'form-check-input'})
+            # Check if field has a widget and attrs attribute
+            if hasattr(field.widget, 'attrs'):
+                # Add or update class attribute
+                current_classes = field.widget.attrs.get('class', '')
+                if 'form-control' not in current_classes and not isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = f'{current_classes} form-control'.strip()
+                elif isinstance(field.widget, forms.CheckboxInput) and 'form-check-input' not in current_classes:
+                     field.widget.attrs['class'] = f'{current_classes} form-check-input'.strip()
             
-        # Set request_received_date to current time for new instances
-        if not self.instance.pk:
+        if not self.instance.pk: # For new instances
             self.fields['request_received_date'].initial = timezone.now().strftime('%Y-%m-%dT%H:%M')
 
-        # --- Dynamic Querysets for Project, Trustport Folder ---
         current_customer_id = None
         current_environment_id = None
-        current_project_id = None
+        current_project_id = None # For filtering children of project
 
-        if self.data: # Priority for POST requests (submitted data)
-            current_customer_id = self.data.get('customer')
-            current_environment_id = self.data.get('tvf_environment')
-            current_project_id = self.data.get('project')
-        elif self.instance.pk: # For existing instances (update view, pre-filled)
+        if self.is_bound: # Form is submitted with data
+            try:
+                customer_val = self.data.get('customer')
+                if customer_val and customer_val.isdigit():
+                    current_customer_id = int(customer_val)
+            except (ValueError, TypeError):
+                pass 
+            try:
+                environment_val = self.data.get('tvf_environment')
+                if environment_val and environment_val.isdigit():
+                    current_environment_id = int(environment_val)
+            except (ValueError, TypeError):
+                pass
+            try:
+                project_val = self.data.get('project')
+                if project_val and project_val.isdigit():
+                    current_project_id = int(project_val)
+            except (ValueError, TypeError):
+                pass
+        elif self.instance and self.instance.pk: # Form is for an existing instance
             current_customer_id = self.instance.customer_id
             current_environment_id = self.instance.tvf_environment_id
             current_project_id = self.instance.project_id
-        # For initial GET requests, these will remain None, and JS handles initial population
 
-        # Convert IDs to int safely
-        try:
-            current_customer_id = int(current_customer_id) if current_customer_id else None
-            current_environment_id = int(current_environment_id) if current_environment_id else None
-            current_project_id = int(current_project_id) if current_project_id else None
-        except (ValueError, TypeError):
-            current_customer_id = None
-            current_environment_id = None
-            current_project_id = None
-
-        # Populate Project queryset
-        if current_customer_id and current_environment_id:
-            self.fields['project'].queryset = Project.objects.filter(
-                customer_id=current_customer_id,
-                tvf_environment_id=current_environment_id
-            ).order_by('name')
-        else:
-            self.fields['project'].queryset = Project.objects.none()
-
-        # Populate Trustport Folder queryset
+        # Populate Trustport Folder queryset (dependent on customer and project)
         if current_customer_id and current_project_id:
             self.fields['trustport_folder_actual'].queryset = TrustportFolder.objects.filter(
-                customer_id=current_customer_id, 
-                project_id=current_project_id
+                customer_id=current_customer_id, project_id=current_project_id
             ).order_by('folder_path')
         else:
             self.fields['trustport_folder_actual'].queryset = TrustportFolder.objects.none()
@@ -285,7 +286,7 @@ class TestRequestShippingForm(forms.ModelForm):
     dispatch_method = forms.ModelChoiceField(
         queryset=DispatchMethod.objects.none(), # Will be filtered dynamically
         empty_label="Select Dispatch Method",
-        required=False,
+        required=False, # As per your model and template
         help_text="Method of dispatch."
     )
     shipping_sign_off_by = forms.ModelChoiceField(
@@ -316,11 +317,59 @@ class TestRequestShippingForm(forms.ModelForm):
         }
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # ... (styling logic as in TestRequestForm) ...
         for field_name, field in self.fields.items():
-            if isinstance(field.widget, (forms.TextInput, forms.Textarea, forms.Select, forms.EmailInput, forms.NumberInput, forms.DateTimeInput)):
-                field.widget.attrs.update({'class': 'form-control'})
-            elif isinstance(field.widget, forms.CheckboxInput):
-                field.widget.attrs.update({'class': 'form-check-input'})
+            if hasattr(field.widget, 'attrs'):
+                current_classes = field.widget.attrs.get('class', '')
+                if 'form-control' not in current_classes and not isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs['class'] = f'{current_classes} form-control'.strip()
+
+        current_customer_id = None
+        current_project_id = None
+
+        # This form is instantiated with an instance of TestRequestShipping in the update view.
+        # In the create_tvf_view, it's instantiated without an instance but with a prefix.
+        # To get customer/project, we need to look at the parent TestRequest.
+        # If this form is part of a larger POST submission that includes the main TestRequest data:
+        if self.data: # If form is bound (e.g. during POST validation)
+            # Try to get customer/project from the main form's submitted data if available
+            # Note: self.data for a prefixed form only contains its own fields.
+            # This means the view needs to handle this linkage or pass initial data.
+            # For simplicity, we'll assume the view might pass initial data or rely on instance.
+            pass
+
+        if self.instance and self.instance.pk and hasattr(self.instance, 'test_request'):
+            parent_test_request = self.instance.test_request
+            if parent_test_request:
+                current_customer_id = parent_test_request.customer_id
+                current_project_id = parent_test_request.project_id
+        
+        # If this form is part of a larger POST submission, and you need to access main form's data:
+        # This is tricky. Usually, you'd pass the parent form's cleaned_data or instance when initializing.
+        # For now, the AJAX in pm_create_tvf.html updates shipping_form.dispatch_method directly.
+        # Let's assume the JS handles populating it. If validation fails and re-renders,
+        # the queryset needs to be set based on the submitted parent form data.
+        # The `create_tvf_view` should ideally pass initial data or handle this.
+
+        # Fallback based on what TestRequestForm would have submitted for customer/project:
+        if self.is_bound: # If there's POST data for this form
+            # This is complex as this form doesn't directly contain customer/project fields
+            # The filtering for dispatch_method is handled by JavaScript in your template.
+            # For server-side validation on POST, if the JS fails or is bypassed, this queryset needs to be correct.
+            # One way is to make the view pass 'customer_id' and 'project_id' as initial data to this form
+            # if they are available from the main TestRequestForm.
+            pass
+
+
+        if current_customer_id and current_project_id:
+            self.fields['dispatch_method'].queryset = DispatchMethod.objects.filter(
+                Q(customer_id=current_customer_id, project_id=current_project_id) |
+                Q(customer__isnull=True, project__isnull=True) # Global methods
+            ).order_by('name')
+        else: # Default to only global methods if customer/project context is missing
+            self.fields['dispatch_method'].queryset = DispatchMethod.objects.filter(
+                customer__isnull=True, project__isnull=True
+            ).order_by('name')
 
 # --- Inline Formset Factories ---
 
