@@ -815,4 +815,65 @@
             }
         }); // End of the single $(document).ready block
     </script>
+    {# Empty form templates for JavaScript to clone #}
+    <div style="display: none;">
+        {# Plastic Code Empty Form #}
+        <div id="empty-plastic-code-form">
+            <div class="inline-formset-row">
+                {% for field in plastic_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button delete-formset-row-btn">Delete</button>
+            </div>
+        </div>
+
+        {# Input File Empty Form #}
+        <div id="empty-input-file-form">
+            <div class="inline-formset-row">
+                {% for field in input_file_formset.empty_form %}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button delete-formset-row-btn">Delete Input File</button>
+
+                {# Nested PAN Formset for an empty Input File #}
+                <div class="nested-formset-container w-full">
+                    <h3 class="text-xl font-semibold text-gray-600 mb-3">PANs for New File</h3>
+                    {# This needs a dynamically named management form #}
+                    <input type="hidden" name="input_files-__prefix__-pans-TOTAL_FORMS" id="id_input_files-__prefix__-pans-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-INITIAL_FORMS" id="id_input_files-__prefix__-pans-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MIN_NUM_FORMS" id="id_input_files-__prefix__-pans-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="input_files-__prefix__-pans-MAX_NUM_FORMS" id="id_input_files-__prefix__-pans-MAX_NUM_FORMS" value="1000">
+                    
+                    {# The button for adding new PANs inside this new input file #}
+                    <button type="button" class="add-row-button bg-blue-500 hover:bg-blue-600 add-nested-formset-row-btn" 
+                        data-formset-prefix="input_files-__prefix__-pans">Add Another PAN</button>
+                </div>
+            </div>
+        </div>
+
+        {# PAN Empty Form (for nested formset) #}
+        <div id="empty-pan-form">
+            <div class="nested-formset-row">
+                {% for field in pans_formsets.0.empty_form %} {# Use .0 to get the first formset's empty_form #}
+                    <div class="form-group">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}:</label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}
+                        {% if field.errors %}<ul class="errorlist">{{ field.errors }}</ul>{% endif %}
+                    </div>
+                {% endfor %}
+                <button type="button" class="delete-button delete-nested-formset-row-btn">Delete PAN</button>
+            </div>
+        </div>
+    </div>
 {% endblock %}
