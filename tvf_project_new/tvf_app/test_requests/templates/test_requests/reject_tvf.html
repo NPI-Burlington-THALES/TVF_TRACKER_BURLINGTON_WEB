@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Reject TVF #{{ tvf.tvf_number }}{% endblock %}
+
+{% block content %}
+    <h1>Reject Test Validation Form (TVF #{{ tvf.tvf_number }})</h1>
+
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header">
+            TVF Details for Rejection
+        </div>
+        <div class="card-body">
+            <p><strong>TVF Name:</strong> {{ tvf.tvf_name }}</p>
+            <p><strong>Customer:</strong> {{ tvf.customer.name }}</p>
+            <p><strong>Project:</strong> {{ tvf.project.name }}</p>
+            <p><strong>Current Status:</strong> {{ tvf.status.name }}</p>
+            <p><strong>Current Phase:</strong> {{ tvf.current_phase.name }}</p>
+        </div>
+    </div>
+
+    <form method="post" class="bg-white p-8 rounded-lg shadow-md">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="target_phase" class="form-label">Reject To Phase:</label>
+            <select class="form-control" id="target_phase" name="target_phase" required>
+                <option value="">Select a phase</option>
+                {% for phase in available_phases %}
+                    <option value="{{ phase.name }}" {% if selected_target_phase == phase.name %}selected{% endif %}>{{ phase.name }}</option>
+                {% endfor %}
+            </select>
+            <div class="form-text">Select the phase/department to which this TVF should be rejected.</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="reject_reason" class="form-label">Rejection Reason:</label>
+            <select class="form-control" id="reject_reason" name="reject_reason" required>
+                <option value="">Select a reason</option>
+                {% for reason in reject_reasons %}
+                    <option value="{{ reason.id }}" {% if selected_reject_reason_id|slugify == reason.id|slugify %}selected{% endif %}>{{ reason.reason }}</option>
+                {% endfor %}
+            </select>
+            <div class="form-text">Select the predefined reason for rejection. This field is mandatory.</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="comments" class="form-label">Rejection Comments:</label>
+            <textarea class="form-control" id="comments" name="comments" rows="5" required placeholder="Provide detailed comments regarding the rejection.">{{ submitted_comments|default_if_none:"" }}</textarea>
+            <div class="form-text">Provide detailed comments regarding the rejection. This field is mandatory.</div>
+        </div>
+
+        <div class="d-flex justify-content-end mt-4">
+            <button type="submit" class="btn btn-danger me-2">Confirm Rejection</button>
+            <a href="{% url 'test_requests:coach_dashboard' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

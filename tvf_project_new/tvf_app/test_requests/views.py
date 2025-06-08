@@ -17,7 +17,7 @@ from .models import (
     TestRequest, Customer, Project, TVFType, TVFEnvironment, TVFStatus,
     PlasticCodeLookup, DispatchMethod, TestRequestPhaseDefinition,
     TestRequestPlasticCode, TestRequestInputFile, TestRequestPAN,
-    TestRequestQuality, TestRequestShipping, TrustportFolder
+    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason # Import RejectReason
 )
 from .forms import (
     TestRequestForm, TestRequestPlasticCodeForm, TestRequestInputFileForm,
@@ -361,18 +361,21 @@ def npi_update_tvf_view(request, tvf_id):
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        comments = request.POST.get('comments', tvf.comments)
+        # Use request.POST.get('comments', '') to default to empty string if not provided,
+        # ensuring old comments are cleared if the field is empty on submission.
+        comments = request.POST.get('comments', '') 
 
         if action == 'process':
             tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF Data Processed')
             tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Quality Validation', order=3) # Add order
-            tvf.comments = comments
+            tvf.comments = comments # Update comments field
             tvf.is_rejected = False
             tvf.save()
             messages.success(request, f"TVF {tvf.tvf_number} processed by NPI and moved to Quality queue!")
             return redirect('test_requests:coach_dashboard')
         
         elif action == 'reject':
+            # Redirect to the reject view, potentially passing the current phase for context
             return redirect('test_requests:reject_tvf', tvf_id=tvf.pk)
         
     return render(request, 'test_requests/npi_update_tvf.html', {'tvf': tvf, 'role': 'NPI User'})
@@ -390,7 +393,7 @@ def quality_update_tvf_view(request, tvf_id):
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        comments = request.POST.get('comments', tvf.comments)
+        comments = request.POST.get('comments', '') # Default to empty string
 
         if action == 'process':
             tvf.status, _ = TVFStatus.objects.get_or_create(name='Validation Done')
@@ -420,7 +423,7 @@ def logistics_update_tvf_view(request, tvf_id):
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        comments = request.POST.get('comments', tvf.comments)
+        comments = request.POST.get('comments', '') # Default to empty string
         shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
 
         if action == 'process':
@@ -472,15 +475,20 @@ def reject_tvf_view(request, tvf_id):
         rejection_comments = request.POST.get('comments')
         reject_reason_id = request.POST.get('reject_reason')
 
-        if not target_phase_name or not rejection_comments:
-            messages.error(request, "Please select a target phase and provide rejection comments.")
+        # --- MODIFIED VALIDATION: Make reject_reason mandatory ---
+        if not target_phase_name or not rejection_comments or not reject_reason_id:
+            messages.error(request, "Please select a target phase, provide rejection comments, AND select a rejection reason.")
             available_phases = TestRequestPhaseDefinition.objects.all().order_by('order')
             reject_reasons = RejectReason.objects.all().order_by('reason')
             return render(request, 'test_requests/reject_tvf.html', {
                 'tvf': tvf,
                 'available_phases': available_phases,
                 'reject_reasons': reject_reasons,
-                'role': 'Reject TVF'
+                'role': 'Reject TVF',
+                # Pass back the submitted values to re-populate the form
+                'selected_target_phase': target_phase_name,
+                'submitted_comments': rejection_comments,
+                'selected_reject_reason_id': reject_reason_id,
             })
 
         try:
@@ -494,16 +502,18 @@ def reject_tvf_view(request, tvf_id):
 
             target_status, _ = TVFStatus.objects.get_or_create(name=new_status_name)
             target_phase = TestRequestPhaseDefinition.objects.get(name=target_phase_name)
-            reject_reason_obj = RejectReason.objects.get(pk=reject_reason_id) if reject_reason_id else None
+            reject_reason_obj = RejectReason.objects.get(pk=reject_reason_id) # This will now always exist due to validation
+            
+            # Append rejection details to existing comments, if any
+            current_comments = tvf.comments if tvf.comments else ""
+            tvf.comments = f"{current_comments}\n\nREJECTED by {request.user.username} to {target_phase_name} ({reject_reason_obj.reason}): {rejection_comments}"
             
             tvf.status = target_status
             tvf.current_phase = target_phase
-            tvf.comments = f"REJECTED by {request.user.username} to {target_phase_name}: {rejection_comments}"
-            
             tvf.is_rejected = True
             tvf.rejected_by = request.user
             tvf.rejected_reason = reject_reason_obj
-            tvf.rejected_comments = rejection_comments
+            tvf.rejected_comments = rejection_comments # This stores only the specific rejection comment
             tvf.rejected_date = timezone.now()
             
             tvf.save()
@@ -512,11 +522,12 @@ def reject_tvf_view(request, tvf_id):
         
         except TestRequestPhaseDefinition.DoesNotExist:
             messages.error(request, "Invalid target phase selected for rejection.")
-        except RejectReason.DoesNotExist:
+        except RejectReason.DoesNotExist: # This error should ideally not be hit with updated validation
             messages.error(request, "Invalid rejection reason selected.")
         except Exception as e:
             messages.error(request, f"An unexpected error occurred during rejection: {e}")
 
+    # GET request logic (and re-render after validation failure)
     available_phases = TestRequestPhaseDefinition.objects.all().order_by('order')
     reject_reasons = RejectReason.objects.all().order_by('reason')
 
