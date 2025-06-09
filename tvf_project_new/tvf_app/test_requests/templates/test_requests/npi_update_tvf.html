@@ -38,7 +38,16 @@
 
         <div class="d-flex justify-content-between mt-4">
             <button type="submit" name="action" value="process" class="btn btn-success">
-                <i class="fas fa-arrow-alt-circle-right"></i> Process TVF (Push to Quality)
+                <i class="fas fa-arrow-alt-circle-right"></i>
+                {% if tvf.current_phase.name == 'NPI Data Processing' %}
+                    Mark as DP Done
+                {% elif tvf.current_phase.name == 'TVF_DP_DONE' %}
+                    Mark as Processed at NPI
+                {% elif tvf.current_phase.name == 'TVF_PROCESSED_AT_NPI' %}
+                    Push to Quality
+                {% else %}
+                    Process TVF
+                {% endif %}
             </button>
             <button type="submit" name="action" value="reject" class="btn btn-danger">
                 <i class="fas fa-times-circle"></i> Reject TVF

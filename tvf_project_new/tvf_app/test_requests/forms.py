@@ -335,7 +335,6 @@ class TestRequestShippingForm(forms.ModelForm):
         }
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # ... (styling logic as in TestRequestForm) ...
         for field_name, field in self.fields.items():
             if hasattr(field.widget, 'attrs'):
                 current_classes = field.widget.attrs.get('class', '')
@@ -345,39 +344,12 @@ class TestRequestShippingForm(forms.ModelForm):
         current_customer_id = None
         current_project_id = None
 
-        # This form is instantiated with an instance of TestRequestShipping in the update view.
-        # In the create_tvf_view, it's instantiated without an instance but with a prefix.
-        # To get customer/project, we need to look at the parent TestRequest.
-        # If this form is part of a larger POST submission that includes the main TestRequest data:
-        if self.data: # If form is bound (e.g. during POST validation)
-            # Try to get customer/project from the main form's submitted data if available
-            # Note: self.data for a prefixed form only contains its own fields.
-            # This means the view needs to handle this linkage or pass initial data.
-            # For simplicity, we'll assume the view might pass initial data or rely on instance.
-            pass
-
         if self.instance and self.instance.pk and hasattr(self.instance, 'test_request'):
             parent_test_request = self.instance.test_request
             if parent_test_request:
                 current_customer_id = parent_test_request.customer_id
                 current_project_id = parent_test_request.project_id
         
-        # If this form is part of a larger POST submission, and you need to access main form's data:
-        # This is tricky. Usually, you'd pass the parent form's cleaned_data or instance when initializing.
-        # For now, the AJAX in pm_create_tvf.html updates shipping_form.dispatch_method directly.
-        # Let's assume the JS handles populating it. If validation fails and re-renders,
-        # the queryset needs to be set based on the submitted parent form data.
-        # The `create_tvf_view` should ideally pass initial data or handle this.
-
-        # Fallback based on what TestRequestForm would have submitted for customer/project:
-        if self.is_bound: # If there's POST data for this form
-            # This is complex as this form doesn't directly contain customer/project fields
-            # The filtering for dispatch_method is handled by JavaScript in your template.
-            # For server-side validation on POST, if the JS fails or is bypassed, this queryset needs to be correct.
-            # One way is to make the view pass 'customer_id' and 'project_id' as initial data to this form
-            # if they are available from the main TestRequestForm.
-            pass
-
 
         if current_customer_id and current_project_id:
             self.fields['dispatch_method'].queryset = DispatchMethod.objects.filter(
@@ -395,7 +367,7 @@ class TestRequestShippingForm(forms.ModelForm):
 PlasticCodeFormSet = inlineformset_factory(
     TestRequest, TestRequestPlasticCode, form=TestRequestPlasticCodeForm,
     extra=1, 
-    can_delete=True, # Keep can_delete=True for actual deletion, but hide UI button via JS if needed
+    can_delete=True,
     fields=('plastic_code_lookup', 'manual_plastic_code', 'quantity', 'thermal_colour') 
 )
 

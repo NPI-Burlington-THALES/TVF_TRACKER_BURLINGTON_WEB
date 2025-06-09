@@ -2,9 +2,7 @@
 from django.urls import reverse_lazy
 from django.views.generic.edit import FormView
 from django.contrib import messages
-from .forms import CustomUserCreationForm
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
 from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 from datetime import timedelta
@@ -17,13 +15,10 @@ from .models import (
     TestRequest, Customer, Project, TVFType, TVFEnvironment, TVFStatus,
     PlasticCodeLookup, DispatchMethod, TestRequestPhaseDefinition,
     TestRequestPlasticCode, TestRequestInputFile, TestRequestPAN,
-    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason # Import RejectReason
+    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason
 )
-from .forms import (
-    TestRequestForm, TestRequestPlasticCodeForm, TestRequestInputFileForm,
-    TestRequestPANForm, TestRequestQualityForm, TestRequestShippingForm,
-    PlasticCodeFormSet, InputFileFormSet, PanInlineFormSet # Import PanInlineFormSet
-)
+from .forms import CustomUserCreationForm # Ensure this import is correct and CustomUserCreationForm exists in forms.py
+
 
 # For PDF generation
 from django.http import HttpResponse
@@ -44,7 +39,7 @@ def render_to_pdf(template_src, context_dict={}):
 
 class RegisterView(FormView):
     template_name = 'registration/register.html'
-    form_class = CustomUserCreationForm
+    form_class = CustomUserCreationForm # This is the line causing the error
     success_url = reverse_lazy('login')
 
     def form_valid(self, form):
@@ -94,13 +89,13 @@ def get_filtered_projects(request):
 def get_filtered_plastic_codes(request):
     customer_id = request.GET.get('customer_id')
     project_id = request.GET.get('project_id')
-    environment_id = request.GET.get('environment_id') # <--- Add this line
+    environment_id = request.GET.get('environment_id')
     plastic_codes = []
-    if customer_id and project_id and environment_id: # <--- Update condition
+    if customer_id and project_id and environment_id:
         plastic_codes_query = PlasticCodeLookup.objects.filter(
             customer_id=customer_id,
             project_id=project_id,
-            tvf_environment_id=environment_id # <--- Add this line
+            tvf_environment_id=environment_id
         ).values('id', 'code').order_by('code')
         plastic_codes = list(plastic_codes_query)
     return JsonResponse({'plastic_codes': plastic_codes})
@@ -121,13 +116,12 @@ def get_filtered_dispatch_methods(request):
     customer_id = request.GET.get('customer_id')
     project_id = request.GET.get('project_id')
     methods = []
-    # Dispatch methods can be global (customer/project is null) or specific
     if customer_id and project_id:
         methods = list(DispatchMethod.objects.filter(
             Q(customer_id=customer_id, project_id=project_id) |
-            Q(customer__isnull=True, project__isnull=True) # Allow global methods
+            Q(customer__isnull=True, project__isnull=True)
         ).values('id', 'name').order_by('name'))
-    else: # If no specific customer/project, show only global ones
+    else:
         methods = list(DispatchMethod.objects.filter(
             customer__isnull=True, project__isnull=True
         ).values('id', 'name').order_by('name'))
@@ -158,17 +152,67 @@ def get_sla_and_calculate_ship_date(request):
 @login_required
 @user_passes_test(can_view_dashboard, login_url='test_requests:access_denied')
 def coach_dashboard(request):
-    open_statuses = TVFStatus.objects.exclude(name__in=['Completed', 'Shipped', 'Rejected']).values_list('name', flat=True) # Exclude 'Shipped' too
-    open_tvfs = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
+    open_statuses = TVFStatus.objects.exclude(name__in=['Completed', 'Shipped', 'Rejected']).values_list('name', flat=True)
+    all_open_tvfs = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
     
+    # Define phase names for filtering
+    tvf_released_phase_name = 'TVF_RELEASED' # This is the initial NPI phase
+    tvf_dp_done_phase_name = 'TVF_DP_DONE'
+    tvf_processed_at_npi_phase_name = 'TVF_PROCESSED_AT_NPI'
+    tvf_open_at_qa_phase_name = 'TVF_OPEN_AT_QA'
+    tvf_validated_at_qa_phase_name = 'TVF_VALIDATED_AT_QA'
+    tvf_open_at_logistics_phase_name = 'TVF_OPEN_AT_LOGISTICS'
+
+    # Filter TVFs for NPI sections
+    npi_released_tvfs = all_open_tvfs.filter(current_phase__name=tvf_released_phase_name)
+    npi_dp_done_tvfs = all_open_tvfs.filter(current_phase__name=tvf_dp_done_phase_name)
+    npi_processed_tvfs = all_open_tvfs.filter(current_phase__name=tvf_processed_at_npi_phase_name)
+
+    # Filter TVFs for Quality sections
+    quality_open_tvfs = all_open_tvfs.filter(current_phase__name=tvf_open_at_qa_phase_name)
+    quality_validated_tvfs = all_open_tvfs.filter(current_phase__name=tvf_validated_at_qa_phase_name)
+
+    # Filter TVFs for Logistics sections
+    logistics_open_tvfs = all_open_tvfs.filter(current_phase__name=tvf_open_at_logistics_phase_name)
+
+
+    # TVFs that are not in any of the specific sections above
+    categorized_tvf_ids = list(npi_released_tvfs.values_list('id', flat=True)) + \
+                          list(npi_dp_done_tvfs.values_list('id', flat=True)) + \
+                          list(npi_processed_tvfs.values_list('id', flat=True)) + \
+                          list(quality_open_tvfs.values_list('id', flat=True)) + \
+                          list(quality_validated_tvfs.values_list('id', flat=True)) + \
+                          list(logistics_open_tvfs.values_list('id', flat=True))
+
+    other_open_tvfs = all_open_tvfs.exclude(id__in=categorized_tvf_ids)
+
+    # Phase lists for general update button conditions in "All Other Open TVFs" section
+    npi_phases_for_button = [tvf_released_phase_name, tvf_dp_done_phase_name, tvf_processed_at_npi_phase_name]
+    quality_phases_for_button = [tvf_open_at_qa_phase_name, tvf_validated_at_qa_phase_name]
+    logistics_phases_for_button = [tvf_open_at_logistics_phase_name]
+
     context = {
-        'open_tvfs': open_tvfs,
+        'all_open_tvfs': all_open_tvfs,
         'role': 'Coach Dashboard',
         'is_project_manager': is_project_manager(request.user),
         'is_npi_user': is_npi_user(request.user),
         'is_quality_user': is_quality_user(request.user),
         'is_logistics_user': is_logistics_user(request.user),
         'is_coach': is_coach(request.user),
+        
+        # Categorized TVF lists
+        'npi_released_tvfs': npi_released_tvfs,
+        'npi_dp_done_tvfs': npi_dp_done_tvfs,
+        'npi_processed_tvfs': npi_processed_tvfs,
+        'quality_open_tvfs': quality_open_tvfs,
+        'quality_validated_tvfs': quality_validated_tvfs,
+        'logistics_open_tvfs': logistics_open_tvfs,
+        'other_open_tvfs': other_open_tvfs,
+
+        # Phase lists for button conditions in general table (if still used)
+        'npi_phases_for_button': npi_phases_for_button,       
+        'quality_phases_for_button': quality_phases_for_button, 
+        'logistics_phases_for_button': logistics_phases_for_button, 
     }
     return render(request, 'test_requests/coach_dashboard.html', context)
 
@@ -204,48 +248,35 @@ def create_tvf_view(request):
         # Validate main form and primary formsets first
         main_form_is_valid = form.is_valid()
         plastic_formset_is_valid = plastic_formset.is_valid()
-        # Call is_valid() here to populate cleaned_data for input_file_formset's forms
         input_file_formset_is_valid = input_file_formset.is_valid()
         shipping_form_is_valid = shipping_form.is_valid()
 
-        # Initialize pans_formsets; it will be populated based on input_file_formset's state
         processed_pans_formsets = []
-        all_pan_formsets_valid = True # Assume true initially
+        all_pan_formsets_valid = True
 
         if input_file_formset_is_valid:
-            # If input_file_formset is valid, iterate through its forms to setup PAN formsets
-            for i, iff_form in enumerate(input_file_formset.forms): # iff_form is TestRequestInputFileForm instance
-                # Now it's safe to access iff_form.cleaned_data
+            for i, iff_form in enumerate(input_file_formset.forms):
                 if not iff_form.cleaned_data.get('DELETE', False):
                     prefix = f'input_files-{i}-pans'
-                    # Instance for PanInlineFormSet should be iff_form.instance
                     pan_fs = PanInlineFormSet(request.POST, instance=iff_form.instance, prefix=prefix)
                     if not pan_fs.is_valid():
                         all_pan_formsets_valid = False
                     processed_pans_formsets.append(pan_fs)
                 else:
-                    # If parent (input_file_form) is marked for deletion, add an empty/unbound formset
-                    # or handle as appropriate for your template.
                     prefix = f'input_files-{i}-pans'
-                    # Create an unbound formset as a placeholder if needed for template consistency
                     empty_pan_fs = PanInlineFormSet(prefix=prefix)
                     processed_pans_formsets.append(empty_pan_fs)
 
-        elif request.POST: # input_file_formset is NOT valid, but we have POST data
-            # Rebuild pans_formsets with POST data to show errors and retain values
-            all_pan_formsets_valid = True # Re-evaluate for this case
+        elif request.POST:
+            all_pan_formsets_valid = True
             for i, iff_form_unvalidated in enumerate(input_file_formset.forms):
                 prefix = f'input_files-{i}-pans'
                 instance_for_pan = iff_form_unvalidated.instance if iff_form_unvalidated.instance and iff_form_unvalidated.instance.pk else None
                 pan_fs_with_data = PanInlineFormSet(request.POST, instance=instance_for_pan, prefix=prefix)
-                # Call is_valid() to populate errors for re-rendering, and check validity
                 if not pan_fs_with_data.is_valid():
                      all_pan_formsets_valid = False
                 processed_pans_formsets.append(pan_fs_with_data)
         
-        # If there were no input_file_formset forms (e.g. extra=0 and no initial forms with POST data)
-        # and it's a POST request, processed_pans_formsets might be empty.
-        # Ensure all_pan_formsets_valid is True if processed_pans_formsets is empty.
         if not processed_pans_formsets:
             all_pan_formsets_valid = True
 
@@ -265,36 +296,34 @@ def create_tvf_view(request):
                     action = request.POST.get('action')
                     if action == 'submit':
                         initial_status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED')
-                        # Ensure order is defined for phases in your models or migrations
-                        submitted_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='NPI Data Processing', defaults={'order': 2})
+                        # Initial NPI Phase: TVF_RELEASED (order 2)
+                        released_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
                         test_request.status = initial_status
-                        test_request.current_phase = submitted_to_npi_phase
+                        test_request.current_phase = released_to_npi_phase
                     else: # 'save_draft'
                         draft_status, _ = TVFStatus.objects.get_or_create(name='Draft')
                         pm_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', defaults={'order': 1})
                         test_request.status = draft_status
                         test_request.current_phase = pm_phase
                     
-                    test_request.save() # Save main TestRequest to get ID
+                    test_request.save()
 
                     plastic_formset.instance = test_request
                     plastic_formset.save()
 
-                    # Save Input Files and their nested PANs
                     for i, input_file_form in enumerate(input_file_formset.forms):
                         if input_file_form.cleaned_data.get('DELETE'):
-                            if input_file_form.instance.pk: # Only delete if it's an existing instance
+                            if input_file_form.instance.pk:
                                 input_file_form.instance.delete()
-                            continue # Skip saving this form and its nested PANs
+                            continue
                         
-                        # Only save if the form has data or is an initial form that's not empty
                         if input_file_form.has_changed() or (not input_file_form.instance.pk and any(input_file_form.cleaned_data.values())):
                             input_file_instance = input_file_form.save(commit=False)
                             input_file_instance.test_request = test_request
-                            input_file_instance.save() # Save TestRequestInputFile
+                            input_file_instance.save()
 
                             if i < len(processed_pans_formsets):
-                                pan_fs_to_save = processed_pans_formsets[i] # This formset is already validated
+                                pan_fs_to_save = processed_pans_formsets[i]
                                 for pan_form_instance in pan_fs_to_save.forms:
                                     if pan_form_instance.cleaned_data.get('DELETE'):
                                         if pan_form_instance.instance.pk:
@@ -302,7 +331,7 @@ def create_tvf_view(request):
                                         continue
                                     if pan_form_instance.has_changed() or (not pan_form_instance.instance.pk and any(pan_form_instance.cleaned_data.values())):
                                         pan_item = pan_form_instance.save(commit=False)
-                                        pan_item.test_request_input_file = input_file_instance # Link to parent
+                                        pan_item.test_request_input_file = input_file_instance
                                         pan_item.save()
                     
                     shipping = shipping_form.save(commit=False)
@@ -312,9 +341,8 @@ def create_tvf_view(request):
                 if action == 'submit':
                     messages.success(request, f"TVF {test_request.tvf_number} created and submitted to NPI!")
                     return redirect('test_requests:coach_dashboard')
-                else: # 'save_draft'
+                else:
                     messages.info(request, f"TVF {test_request.tvf_number} saved as draft.")
-                    # Redirect to detail view of the draft or back to create form
                     return redirect('test_requests:detail', pk=test_request.pk)
 
 
@@ -322,28 +350,25 @@ def create_tvf_view(request):
                 messages.error(request, f"Error creating Test Request: {e}")
                 import traceback
                 traceback.print_exc()
-        else: # Not is_overall_valid
+        else:
             messages.error(request, "Please correct the errors below. Check all sections, including PAN entries if applicable.")
-            # Fall through to render the form with errors.
-            # `processed_pans_formsets` will be used in the context.
 
-    else: # GET request
+    else:
         form = TestRequestForm(initial={'tvf_initiator': request.user, 'request_received_date': timezone.now().strftime('%Y-%m-%dT%H:%M')})
         plastic_formset = PlasticCodeFormSet(prefix='plastic_codes')
-        input_file_formset = InputFileFormSet(prefix='input_files') # For GET, these are unbound
+        input_file_formset = InputFileFormSet(prefix='input_files')
         shipping_form = TestRequestShippingForm(prefix='shipping')
         
-        processed_pans_formsets = [] # For GET, initialize empty PAN formsets
-        # Create one PanInlineFormSet for each form in the input_file_formset (including 'extra' forms)
+        processed_pans_formsets = []
         for i in range(input_file_formset.initial_form_count() + input_file_formset.extra):
             prefix = f'input_files-{i}-pans'
-            processed_pans_formsets.append(PanInlineFormSet(prefix=prefix)) # Unbound
+            processed_pans_formsets.append(PanInlineFormSet(prefix=prefix))
 
     context = {
         'form': form,
         'plastic_formset': plastic_formset,
         'input_file_formset': input_file_formset,
-        'pans_formsets': processed_pans_formsets, # Use this consistent variable name
+        'pans_formsets': processed_pans_formsets,
         'shipping_form': shipping_form,
         'role': 'Project Manager - Create TVF'
     }
@@ -355,29 +380,74 @@ def create_tvf_view(request):
 def npi_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    if not (tvf.status.name in ['TVF_SUBMITTED', 'Rejected to NPI'] or tvf.current_phase.name == 'NPI Data Processing'):
+    # NPI relevant phases now start with TVF_RELEASED
+    npi_relevant_phases = ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'Rejected to NPI']
+    if not (tvf.current_phase.name in npi_relevant_phases or tvf.status.name == 'Rejected to NPI'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your NPI queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        # Use request.POST.get('comments', '') to default to empty string if not provided,
-        # ensuring old comments are cleared if the field is empty on submission.
         comments = request.POST.get('comments', '') 
 
-        if action == 'process':
-            tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF Data Processed')
-            tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Quality Validation', order=3) # Add order
-            tvf.comments = comments # Update comments field
-            tvf.is_rejected = False
-            tvf.save()
-            messages.success(request, f"TVF {tvf.tvf_number} processed by NPI and moved to Quality queue!")
-            return redirect('test_requests:coach_dashboard')
-        
+        if action == 'dp_done':
+            if tvf.current_phase.name == 'TVF_RELEASED': # From TVF_RELEASED to TVF_DP_DONE
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='DP Done')
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_DP_DONE', defaults={'order': 3})
+                tvf.comments = comments
+                tvf.save()
+                messages.success(request, f"TVF {tvf.tvf_number} marked as DP Done.")
+                return redirect('test_requests:coach_dashboard')
+            else:
+                messages.warning(request, "Cannot mark DP Done in the current phase.")
+
+        elif action == 'tvf_output':
+            if tvf.current_phase.name == 'TVF_DP_DONE': # From TVF_DP_DONE to TVF_PROCESSED_AT_NPI
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF Processed')
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_PROCESSED_AT_NPI', defaults={'order': 4})
+                tvf.comments = comments
+                tvf.save()
+                messages.success(request, f"TVF {tvf.tvf_number} output processed. Ready for QA.")
+                return redirect('test_requests:coach_dashboard')
+            else:
+                 messages.warning(request, "Cannot process TVF Output in the current phase.")
+
+        elif action == 'push_to_qa':
+            if tvf.current_phase.name == 'TVF_PROCESSED_AT_NPI': # From TVF_PROCESSED_AT_NPI to QA
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='Open at QA')
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_OPEN_AT_QA', defaults={'order': 5})
+                tvf.comments = comments
+                tvf.save()
+                messages.success(request, f"TVF {tvf.tvf_number} pushed to Quality queue!")
+                return redirect('test_requests:coach_dashboard')
+            else:
+                messages.warning(request, "Cannot push to QA in the current phase.")
+
+        elif action == 'back_to_released': # New action: Back to Released
+            if tvf.current_phase.name in ['TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI']:
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED') # Revert status to submitted
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
+                tvf.comments = comments
+                tvf.save()
+                messages.info(request, f"TVF {tvf.tvf_number} moved back to Released state.")
+                return redirect('test_requests:coach_dashboard')
+            else:
+                messages.warning(request, "Cannot move back to Released from current phase.")
+
+        elif action == 'back_to_dp_done': # New action: Back to DP Done (from Processed)
+            if tvf.current_phase.name == 'TVF_PROCESSED_AT_NPI':
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='DP Done') # Revert status
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_DP_DONE', defaults={'order': 3})
+                tvf.comments = comments
+                tvf.save()
+                messages.info(request, f"TVF {tvf.tvf_number} moved back to DP Done state.")
+                return redirect('test_requests:coach_dashboard')
+            else:
+                messages.warning(request, "Cannot move back to DP Done from current phase.")
+
         elif action == 'reject':
-            # Redirect to the reject view, potentially passing the current phase for context
             return redirect('test_requests:reject_tvf', tvf_id=tvf.pk)
-        
+
     return render(request, 'test_requests/npi_update_tvf.html', {'tvf': tvf, 'role': 'NPI User'})
 
 
@@ -387,21 +457,31 @@ def npi_update_tvf_view(request, tvf_id):
 def quality_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    if not (tvf.status.name in ['TVF Data Processed', 'Rejected to Quality'] or tvf.current_phase.name == 'Quality Validation'):
+    quality_relevant_phases = ['TVF_OPEN_AT_QA', 'TVF_VALIDATED_AT_QA', 'Rejected to Quality']
+    if not (tvf.current_phase.name in quality_relevant_phases or tvf.status.name == 'Rejected to Quality'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your Quality queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        comments = request.POST.get('comments', '') # Default to empty string
+        comments = request.POST.get('comments', '')
 
-        if action == 'process':
-            tvf.status, _ = TVFStatus.objects.get_or_create(name='Validation Done')
-            tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Logistics Dispatch', order=4) # Add order
+        if action == 'process': # This button will now advance through QA steps
+            if tvf.current_phase.name == 'TVF_OPEN_AT_QA': # From TVF_OPEN_AT_QA to TVF_VALIDATED_AT_QA
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='Validated')
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_VALIDATED_AT_QA', defaults={'order': 6})
+                messages.success(request, f"TVF {tvf.tvf_number} marked as Validated at Quality!")
+            elif tvf.current_phase.name == 'TVF_VALIDATED_AT_QA': # From TVF_VALIDATED_AT_QA to Logistics
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='Open at Logistics')
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_OPEN_AT_LOGISTICS', defaults={'order': 7})
+                messages.success(request, f"TVF {tvf.tvf_number} pushed to Logistics queue!")
+            else:
+                messages.warning(request, "Invalid Quality process step for this TVF's current phase.")
+                return redirect('test_requests:coach_dashboard')
+            
             tvf.comments = comments
             tvf.is_rejected = False
             tvf.save()
-            messages.success(request, f"TVF {tvf.tvf_number} validated by Quality and moved to Logistics queue!")
             return redirect('test_requests:coach_dashboard')
         
         elif action == 'reject':
@@ -409,13 +489,15 @@ def quality_update_tvf_view(request, tvf_id):
 
     return render(request, 'test_requests/quality_update_tvf.html', {'tvf': tvf, 'role': 'Quality User'})
 
+
 # --- Logistics View: Update Shipping Status ---
 @login_required
 @user_passes_test(is_logistics_user, login_url='test_requests:access_denied')
 def logistics_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    if not (tvf.status.name in ['Validation Done', 'Rejected to Logistics'] or tvf.current_phase.name == 'Logistics Dispatch'):
+    logistics_relevant_phases = ['TVF_OPEN_AT_LOGISTICS', 'Rejected to Logistics']
+    if not (tvf.current_phase.name in logistics_relevant_phases or tvf.status.name == 'Rejected to Logistics'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your Logistics queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
@@ -423,7 +505,7 @@ def logistics_update_tvf_view(request, tvf_id):
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        comments = request.POST.get('comments', '') # Default to empty string
+        comments = request.POST.get('comments', '')
         shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
 
         if action == 'process':
@@ -433,7 +515,7 @@ def logistics_update_tvf_view(request, tvf_id):
                 shipping.save()
 
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='Shipped')
-                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_SHIPPED', order=5) # Add order
+                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_SHIPPED', defaults={'order': 14})
                 tvf.comments = comments
                 tvf.is_rejected = False
                 tvf.tvf_completed_date = timezone.now()
@@ -446,7 +528,7 @@ def logistics_update_tvf_view(request, tvf_id):
         elif action == 'reject':
             return redirect('test_requests:reject_tvf', tvf_id=tvf.pk)
 
-    else: # GET request
+    else:
         shipping_form = TestRequestShippingForm(instance=shipping_instance, prefix='shipping')
 
     return render(request, 'test_requests/logistics_update_tvf.html', {
@@ -460,8 +542,8 @@ def logistics_update_tvf_view(request, tvf_id):
 def reject_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    if not (is_project_manager(request.user) or is_npi_user(request.user) or \
-            is_quality_user(request.user) or is_logistics_user(request.user) or \
+    if not (is_project_manager(request.user) or is_npi_user(request.user) or
+            is_quality_user(request.user) or is_logistics_user(request.user) or
             is_coach(request.user) or request.user.is_superuser):
         messages.error(request, "You do not have permission to reject TVFs.")
         return redirect('test_requests:coach_dashboard')
@@ -475,7 +557,6 @@ def reject_tvf_view(request, tvf_id):
         rejection_comments = request.POST.get('comments')
         reject_reason_id = request.POST.get('reject_reason')
 
-        # --- MODIFIED VALIDATION: Make reject_reason mandatory ---
         if not target_phase_name or not rejection_comments or not reject_reason_id:
             messages.error(request, "Please select a target phase, provide rejection comments, AND select a rejection reason.")
             available_phases = TestRequestPhaseDefinition.objects.all().order_by('order')
@@ -485,7 +566,6 @@ def reject_tvf_view(request, tvf_id):
                 'available_phases': available_phases,
                 'reject_reasons': reject_reasons,
                 'role': 'Reject TVF',
-                # Pass back the submitted values to re-populate the form
                 'selected_target_phase': target_phase_name,
                 'submitted_comments': rejection_comments,
                 'selected_reject_reason_id': reject_reason_id,
@@ -494,40 +574,45 @@ def reject_tvf_view(request, tvf_id):
         try:
             status_map = {
                 'Project Manager': 'Rejected to PM',
-                'NPI Data Processing': 'Rejected to NPI',
-                'Quality Validation': 'Rejected to Quality',
-                'Logistics Dispatch': 'Rejected to Logistics',
+                'TVF_RELEASED': 'Rejected to NPI', # Rejection from Released goes to NPI
+                'TVF_DP_DONE': 'Rejected to NPI',
+                'TVF_PROCESSED_AT_NPI': 'Rejected to NPI',
+                'TVF_OPEN_AT_QA': 'Rejected to Quality',
+                'TVF_VALIDATED_AT_QA': 'Rejected to Quality',
+                'TVF_OPEN_AT_LOGISTICS': 'Rejected to Logistics',
+                'REWORK_AT_PM': 'Rejected',
+                'REWORK_AT_PROD': 'Rejected',
+                'REWORK_AT_LOGISTICS': 'Rejected',
+                'REWORK_AT_QA': 'Rejected',
             }
             new_status_name = status_map.get(target_phase_name, 'Rejected')
 
             target_status, _ = TVFStatus.objects.get_or_create(name=new_status_name)
             target_phase = TestRequestPhaseDefinition.objects.get(name=target_phase_name)
-            reject_reason_obj = RejectReason.objects.get(pk=reject_reason_id) # This will now always exist due to validation
-            
-            # Append rejection details to existing comments, if any
+            reject_reason_obj = RejectReason.objects.get(pk=reject_reason_id)
+
             current_comments = tvf.comments if tvf.comments else ""
             tvf.comments = f"{current_comments}\n\nREJECTED by {request.user.username} to {target_phase_name} ({reject_reason_obj.reason}): {rejection_comments}"
-            
+
             tvf.status = target_status
             tvf.current_phase = target_phase
             tvf.is_rejected = True
             tvf.rejected_by = request.user
             tvf.rejected_reason = reject_reason_obj
-            tvf.rejected_comments = rejection_comments # This stores only the specific rejection comment
+            tvf.rejected_comments = rejection_comments
             tvf.rejected_date = timezone.now()
-            
+
             tvf.save()
             messages.success(request, f"TVF {tvf.tvf_number} rejected to {target_phase_name} successfully!")
             return redirect('test_requests:coach_dashboard')
-        
+
         except TestRequestPhaseDefinition.DoesNotExist:
             messages.error(request, "Invalid target phase selected for rejection.")
-        except RejectReason.DoesNotExist: # This error should ideally not be hit with updated validation
+        except RejectReason.DoesNotExist:
             messages.error(request, "Invalid rejection reason selected.")
         except Exception as e:
             messages.error(request, f"An unexpected error occurred during rejection: {e}")
 
-    # GET request logic (and re-render after validation failure)
     available_phases = TestRequestPhaseDefinition.objects.all().order_by('order')
     reject_reasons = RejectReason.objects.all().order_by('reason')
 
@@ -547,7 +632,7 @@ def access_denied_view(request):
 @login_required
 def test_request_create_view(request):
     messages.info(request, "Please use the 'Create New TVF' link from the dashboard.")
-    return redirect('test_requests:create_tvf') # Redirect to the main PM create view
+    return redirect('test_requests:create_tvf')
 
 
 @login_required
@@ -570,6 +655,7 @@ def test_request_detail_view(request, pk):
     ), pk=pk)
 
     context = {
+
         'test_request': test_request
     }
     return render(request, 'test_requests/test_request_detail.html', context)
@@ -606,7 +692,6 @@ def test_request_update_view(request, pk):
                 with transaction.atomic():
                     test_request_saved = form.save()
 
-                    # Save plastic codes (with manual/lookup logic)
                     for p_form in plastic_formset.forms:
                         if p_form.instance.pk: 
                             if p_form.cleaned_data.get('DELETE'): 
@@ -624,7 +709,6 @@ def test_request_update_view(request, pk):
                             p_form.instance.test_request = test_request_saved
                             p_form.save()
 
-                    # Save input files and nested PANs
                     saved_input_files = input_file_formset.save(commit=False)
                     for i, input_file in enumerate(saved_input_files):
                         input_file.test_request = test_request_saved
