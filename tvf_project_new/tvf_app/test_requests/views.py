@@ -17,7 +17,18 @@ from .models import (
     TestRequestPlasticCode, TestRequestInputFile, TestRequestPAN,
     TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason
 )
-from .forms import CustomUserCreationForm # Ensure this import is correct and CustomUserCreationForm exists in forms.py
+from .forms import ( # This block imports all necessary forms
+    CustomUserCreationForm,
+    TestRequestForm,
+    TestRequestPlasticCodeForm,
+    TestRequestInputFileForm,
+    TestRequestPANForm,
+    TestRequestQualityForm,
+    TestRequestShippingForm,
+    PlasticCodeFormSet,
+    InputFileFormSet,
+    PanInlineFormSet
+)
 
 
 # For PDF generation
@@ -39,7 +50,7 @@ def render_to_pdf(template_src, context_dict={}):
 
 class RegisterView(FormView):
     template_name = 'registration/register.html'
-    form_class = CustomUserCreationForm # This is the line causing the error
+    form_class = CustomUserCreationForm
     success_url = reverse_lazy('login')
 
     def form_valid(self, form):
@@ -148,68 +159,116 @@ def get_sla_and_calculate_ship_date(request):
     return JsonResponse({'ship_date': ship_date})
 
 
-# --- Coach View: Dashboard of ALL OPEN TVFs ---
+# --- Coach View: Dashboard for all roles ---
 @login_required
 @user_passes_test(can_view_dashboard, login_url='test_requests:access_denied')
 def coach_dashboard(request):
     open_statuses = TVFStatus.objects.exclude(name__in=['Completed', 'Shipped', 'Rejected']).values_list('name', flat=True)
-    all_open_tvfs = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
     
-    # Define phase names for filtering
-    tvf_released_phase_name = 'TVF_RELEASED' # This is the initial NPI phase
+    # Define common phase names for filtering
+    pm_phase_name = 'Project Manager' # Used for TVFs rejected back to PM
+    pm_draft_phase_name = 'PM_DRAFT' # New phase for initial drafts
+    tvf_released_phase_name = 'TVF_RELEASED'
     tvf_dp_done_phase_name = 'TVF_DP_DONE'
     tvf_processed_at_npi_phase_name = 'TVF_PROCESSED_AT_NPI'
     tvf_open_at_qa_phase_name = 'TVF_OPEN_AT_QA'
     tvf_validated_at_qa_phase_name = 'TVF_VALIDATED_AT_QA'
     tvf_open_at_logistics_phase_name = 'TVF_OPEN_AT_LOGISTICS'
+    
+    # Initialize all TVF lists as empty
+    pm_draft_tvfs = TestRequest.objects.none()
+    pm_submitted_tvfs = TestRequest.objects.none()
+    npi_released_tvfs = TestRequest.objects.none()
+    npi_dp_done_tvfs = TestRequest.objects.none()
+    npi_processed_tvfs = TestRequest.objects.none()
+    quality_open_tvfs = TestRequest.objects.none()
+    quality_validated_tvfs = TestRequest.objects.none()
+    logistics_open_tvfs = TestRequest.objects.none()
+    other_open_tvfs = TestRequest.objects.none()
+    all_open_tvfs_for_coach = TestRequest.objects.none()
 
-    # Filter TVFs for NPI sections
-    npi_released_tvfs = all_open_tvfs.filter(current_phase__name=tvf_released_phase_name)
-    npi_dp_done_tvfs = all_open_tvfs.filter(current_phase__name=tvf_dp_done_phase_name)
-    npi_processed_tvfs = all_open_tvfs.filter(current_phase__name=tvf_processed_at_npi_phase_name)
+    # Role-based filtering of TVFs
+    if is_project_manager(request.user):
+        # PMs see their own drafts and submitted TVFs based on current phase AND status
+        user_tvfs = TestRequest.objects.filter(tvf_initiator=request.user)
+        pm_draft_tvfs = user_tvfs.filter(status__name='Draft', current_phase__name=pm_draft_phase_name)
+        pm_submitted_tvfs = user_tvfs.filter(status__name='TVF_SUBMITTED', current_phase__name=tvf_released_phase_name)
+        
+    elif is_npi_user(request.user):
+        # NPI users see TVFs in their specific NPI phases
+        npi_released_tvfs = TestRequest.objects.filter(current_phase__name=tvf_released_phase_name)
+        npi_dp_done_tvfs = TestRequest.objects.filter(current_phase__name=tvf_dp_done_phase_name)
+        npi_processed_tvfs = TestRequest.objects.filter(current_phase__name=tvf_processed_at_npi_phase_name)
+        
+    elif is_quality_user(request.user):
+        # Quality users see TVFs in their specific Quality phases
+        quality_open_tvfs = TestRequest.objects.filter(current_phase__name=tvf_open_at_qa_phase_name)
+        quality_validated_tvfs = TestRequest.objects.filter(current_phase__name=tvf_validated_at_qa_phase_name)
+        
+    elif is_logistics_user(request.user):
+        # Logistics users see TVFs in their specific Logistics phase
+        logistics_open_tvfs = TestRequest.objects.filter(current_phase__name=tvf_open_at_logistics_phase_name)
+        
+    elif is_coach(request.user) or request.user.is_superuser:
+        # Coaches/Superusers see all open TVFs and all categorized sections
+        all_open_tvfs_for_coach = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
 
-    # Filter TVFs for Quality sections
-    quality_open_tvfs = all_open_tvfs.filter(current_phase__name=tvf_open_at_qa_phase_name)
-    quality_validated_tvfs = all_open_tvfs.filter(current_phase__name=tvf_validated_at_qa_phase_name)
+        npi_released_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_released_phase_name)
+        npi_dp_done_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_dp_done_phase_name)
+        npi_processed_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_processed_at_npi_phase_name)
 
-    # Filter TVFs for Logistics sections
-    logistics_open_tvfs = all_open_tvfs.filter(current_phase__name=tvf_open_at_logistics_phase_name)
+        quality_open_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_open_at_qa_phase_name)
+        quality_validated_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_validated_at_qa_phase_name)
+
+        logistics_open_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_open_at_logistics_phase_name)
+
+        # Calculate other_open_tvfs only for Coach/Superuser
+        categorized_tvf_ids = list(npi_released_tvfs.values_list('id', flat=True)) + \
+                              list(npi_dp_done_tvfs.values_list('id', flat=True)) + \
+                              list(npi_processed_tvfs.values_list('id', flat=True)) + \
+                              list(quality_open_tvfs.values_list('id', flat=True)) + \
+                              list(quality_validated_tvfs.values_list('id', flat=True)) + \
+                              list(logistics_open_tvfs.values_list('id', flat=True))
+        other_open_tvfs = all_open_tvfs_for_coach.exclude(id__in=categorized_tvf_ids)
 
 
-    # TVFs that are not in any of the specific sections above
-    categorized_tvf_ids = list(npi_released_tvfs.values_list('id', flat=True)) + \
-                          list(npi_dp_done_tvfs.values_list('id', flat=True)) + \
-                          list(npi_processed_tvfs.values_list('id', flat=True)) + \
-                          list(quality_open_tvfs.values_list('id', flat=True)) + \
-                          list(quality_validated_tvfs.values_list('id', flat=True)) + \
-                          list(logistics_open_tvfs.values_list('id', flat=True))
-
-    other_open_tvfs = all_open_tvfs.exclude(id__in=categorized_tvf_ids)
-
-    # Phase lists for general update button conditions in "All Other Open TVFs" section
+    # Phase lists for general update button conditions (if used in 'other_open_tvfs' table)
     npi_phases_for_button = [tvf_released_phase_name, tvf_dp_done_phase_name, tvf_processed_at_npi_phase_name]
     quality_phases_for_button = [tvf_open_at_qa_phase_name, tvf_validated_at_qa_phase_name]
     logistics_phases_for_button = [tvf_open_at_logistics_phase_name]
 
     context = {
-        'all_open_tvfs': all_open_tvfs,
         'role': 'Coach Dashboard',
         'is_project_manager': is_project_manager(request.user),
         'is_npi_user': is_npi_user(request.user),
         'is_quality_user': is_quality_user(request.user),
         'is_logistics_user': is_logistics_user(request.user),
         'is_coach': is_coach(request.user),
+        'is_superuser': request.user.is_superuser,
+
+        # PM specific lists
+        'pm_draft_tvfs': pm_draft_tvfs,
+        'pm_submitted_tvfs': pm_submitted_tvfs,
         
-        # Categorized TVF lists
+        # NPI specific lists (always passed, but conditionally displayed in HTML)
         'npi_released_tvfs': npi_released_tvfs,
         'npi_dp_done_tvfs': npi_dp_done_tvfs,
         'npi_processed_tvfs': npi_processed_tvfs,
+        
+        # Quality specific lists (always passed, but conditionally displayed in HTML)
         'quality_open_tvfs': quality_open_tvfs,
         'quality_validated_tvfs': quality_validated_tvfs,
+
+        # Logistics specific lists (always passed, but conditionally displayed in HTML)
         'logistics_open_tvfs': logistics_open_tvfs,
+
+        # Other open TVFs (only calculated for Coach/Superuser, otherwise empty)
         'other_open_tvfs': other_open_tvfs,
 
-        # Phase lists for button conditions in general table (if still used)
+        # All open TVFs (only for Coach/Superuser for general table)
+        'all_open_tvfs_for_coach': all_open_tvfs_for_coach,
+
+        # Phase lists for button conditions (used in general table for coach)
         'npi_phases_for_button': npi_phases_for_button,       
         'quality_phases_for_button': quality_phases_for_button, 
         'logistics_phases_for_button': logistics_phases_for_button, 
@@ -296,15 +355,15 @@ def create_tvf_view(request):
                     action = request.POST.get('action')
                     if action == 'submit':
                         initial_status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED')
-                        # Initial NPI Phase: TVF_RELEASED (order 2)
                         released_to_npi_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
                         test_request.status = initial_status
                         test_request.current_phase = released_to_npi_phase
                     else: # 'save_draft'
                         draft_status, _ = TVFStatus.objects.get_or_create(name='Draft')
-                        pm_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='Project Manager', defaults={'order': 1})
+                        # New: PM_DRAFT phase for drafts, order 0
+                        pm_draft_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='PM_DRAFT', defaults={'order': 0})
                         test_request.status = draft_status
-                        test_request.current_phase = pm_phase
+                        test_request.current_phase = pm_draft_phase
                     
                     test_request.save()
 
@@ -574,7 +633,8 @@ def reject_tvf_view(request, tvf_id):
         try:
             status_map = {
                 'Project Manager': 'Rejected to PM',
-                'TVF_RELEASED': 'Rejected to NPI', # Rejection from Released goes to NPI
+                'PM_DRAFT': 'Rejected to PM', # Rejection to draft phase, status still Rejected to PM
+                'TVF_RELEASED': 'Rejected to NPI',
                 'TVF_DP_DONE': 'Rejected to NPI',
                 'TVF_PROCESSED_AT_NPI': 'Rejected to NPI',
                 'TVF_OPEN_AT_QA': 'Rejected to Quality',
@@ -710,19 +770,28 @@ def test_request_update_view(request, pk):
                             p_form.save()
 
                     saved_input_files = input_file_formset.save(commit=False)
-                    for i, input_file in enumerate(saved_input_files):
-                        input_file.test_request = test_request_saved
-                        input_file.save()
-                        if pans_formsets[i].is_valid():
-                            pan_fs = pans_formsets[i]
-                            pan_fs.instance = input_file
-                            for pan_form in pan_fs.forms:
-                                if pan_form.instance.pk and pan_form.cleaned_data.get('DELETE'):
-                                    pan_form.instance.delete()
-                                    continue
-                                if pan_form.has_changed():
-                                    pan_form.instance.test_request_input_file = input_file
-                                    pan_form.save()
+                    for i, input_file in enumerate(saved_input_file_formset.forms):
+                        if input_file.cleaned_data.get('DELETE'):
+                            if input_file.instance.pk:
+                                input_file.instance.delete()
+                            continue
+                        
+                        if input_file.has_changed() or (not input_file.instance.pk and any(input_file.cleaned_data.values())):
+                            input_file_instance = input_file.save(commit=False)
+                            input_file_instance.test_request = test_request_saved
+                            input_file_instance.save()
+
+                            if i < len(pans_formsets): # Corrected from processed_pans_formsets
+                                pan_fs_to_save = pans_formsets[i] # Corrected from processed_pans_formsets
+                                for pan_form_instance in pan_fs_to_save.forms:
+                                    if pan_form_instance.cleaned_data.get('DELETE'):
+                                        if pan_form_instance.instance.pk:
+                                            pan_form_instance.instance.delete()
+                                        continue
+                                    if pan_form_instance.has_changed() or (not pan_form_instance.instance.pk and any(pan_form_instance.cleaned_data.values())):
+                                        pan_item = pan_form_instance.save(commit=False)
+                                        pan_item.test_request_input_file = input_file_instance
+                                        pan_item.save()
 
                     shipping_form.save()
                     quality_form.save()
@@ -784,7 +853,7 @@ def test_request_pdf_view(request, pk):
     ), pk=pk)
 
     context = {
-        'test_request': test_request,
-        'current_date': timezone.now(),
+
+        'test_request': test_request
     }
     return render_to_pdf('test_requests/test_request_pdf_template.html', context)

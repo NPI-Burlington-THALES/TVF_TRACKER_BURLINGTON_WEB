@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% load custom_filters %} {# Keep this load tag #}
+{% load custom_filters %} 
 
-{% block title %}Coach Dashboard{% endblock %}
+{% block title %}Dashboard{% endblock %} {# Dynamic title based on role #}
 
 {% block content %}
-    <h1>Coach Dashboard ({{ role }})</h1>
+    <h1>Dashboard {% if is_project_manager %}(Project Manager){% elif is_npi_user %}(NPI User){% elif is_quality_user %}(Quality User){% elif is_logistics_user %}(Logistics User){% elif is_coach or is_superuser %}(Coach / Test Manager){% endif %}</h1>
     {% if messages %}
         <ul class="messages">
             {% for message in messages %}
@@ -26,12 +26,88 @@
         <p><a href="{% url 'test_requests:create_tvf' %}" class="btn btn-primary">Create New TVF</a></p>
     {% endif %}
 
-    {# NPI Specific Sections #}
-    {% if is_npi_user or is_coach or user.is_superuser %}
+    {# Project Manager Sections #}
+    {% if is_project_manager %}
+        <hr>
+        <h2>My TVF Drafts</h2>
+        {% if pm_draft_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr>
+                            <th>TVF #</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in pm_draft_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name }}</td>
+                                <td>{{ tvf.customer.name }}</td>
+                                <td>{{ tvf.project.name }}</td>
+                                <td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                                    <a href="{% url 'test_requests:detail' pk=tvf.pk %}" class="btn btn-info btn-sm">View</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No TVF drafts found.</p>
+        {% endif %}
+
+        <h2 class="mt-4">My Submitted TVFs</h2>
+        {% if pm_submitted_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr>
+                            <th>TVF #</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Status</th>
+                            <th>Current Phase</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in pm_submitted_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name }}</td>
+                                <td>{{ tvf.customer.name }}</td>
+                                <td>{{ tvf.project.name }}</td>
+                                <td>{{ tvf.status.name }}</td>
+                                <td>{{ tvf.current_phase.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:detail' pk=tvf.pk %}" class="btn btn-info btn-sm">View</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No submitted TVFs found.</p>
+        {% endif %}
+
+    {% endif %} {# End Project Manager Sections #}
+
+
+    {# NPI User Sections #}
+    {% if is_npi_user %}
         <hr>
         <h2>NPI Workflow Stages</h2>
 
-        {# NPI Section 1: TVFs Released (Waiting for NPI Data Processing) #}
         <h3>TVFs Released (Waiting for NPI Data Processing)</h3>
         {% if npi_released_tvfs %}
             <div class="table-responsive">
@@ -71,7 +147,6 @@
             <p>No TVFs waiting for NPI Data Processing.</p>
         {% endif %}
 
-        {# NPI Section 2: TVFs in DP Done State #}
         <h3 class="mt-4">TVFs in DP Done State</h3>
         {% if npi_dp_done_tvfs %}
             <div class="table-responsive">
@@ -96,7 +171,7 @@
                                     <form method="post" action="{% url 'test_requests:npi_update_tvf' tvf.pk %}" style="display:inline;">
                                         {% csrf_token %}
                                         <button type="submit" name="action" value="tvf_output" class="btn btn-success btn-sm">TVF Output</button>
-                                        <button type="submit" name="action" value="back_to_released" class="btn btn-secondary btn-sm">Back to Released</button> {# Added back button #}
+                                        <button type="submit" name="action" value="back_to_released" class="btn btn-secondary btn-sm">Back to Released</button>
                                     </form>
                                     <form method="post" action="{% url 'test_requests:reject_tvf' tvf.pk %}" style="display:inline;">
                                         {% csrf_token %}
@@ -112,8 +187,7 @@
             <p>No TVFs currently in DP Done state.</p>
         {% endif %}
 
-        {# NPI Section 3: TVFs Processed at NPI (Ready for QA Push) #}
-        <h3 class="mt-4">TVFs Processed at NPI (Ready for Quality Push)</h3>
+        <h3 class="mt-4">TVFs Processed at NPI</h3>
         {% if npi_processed_tvfs %}
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
@@ -152,67 +226,286 @@
         {% else %}
             <p>No TVFs currently processed at NPI.</p>
         {% endif %}
-    {% endif %}
+    {% endif %} {# End NPI User Sections #}
 
-    <hr class="mt-5">
-    <h2>All Other Open TVFs</h2>
-    {% if other_open_tvfs %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover">
-                <thead>
-                    <tr>
-                        <th>TVF Number</th>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Current Status</th>
-                        <th>Current Phase</th>
-                        <th>Comments</th>
-                        <th>Creation Date</th>
-                        <th>Ship Date</th>
-                        <th>Run Today?</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for tvf in other_open_tvfs %}
+    {# Quality User Sections (Placeholders) #}
+    {% if is_quality_user %}
+        <hr>
+        <h2>Quality Workflow Stages</h2>
+        <h3>TVFs Open at Quality</h3>
+        {% if quality_open_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
                         <tr>
-                            <td>{{ tvf.tvf_number }}</td>
-                            <td>{{ tvf.tvf_name|default:"N/A" }}</td>
-                            <td>{{ tvf.tvf_type.name|default:"N/A" }}</td>
-                            <td>{{ tvf.status.name|default:"N/A" }}</td>
-                            <td>{{ tvf.current_phase.name|default:"N/A" }}</td>
-                            <td>{{ tvf.comments|truncatechars:50|default:"-" }}</td>
-                            <td>{{ tvf.request_received_date|date:"Y-m-d H:i" }}</td>
-                            <td>{{ tvf.request_ship_date|date:"Y-m-d"|default:"N/A" }}</td>
-                            <td>
-                                {% if tvf.run_today %}Yes{% else %}No{% endif %}
-                            </td>
-                            <td>
-                                {# These buttons will only appear if the TVF is NOT in one of the specific NPI/Quality/Logistics sections #}
-                                {% if is_npi_user and tvf.current_phase.name in npi_phases_for_button %}
-                                    <a href="{% url 'test_requests:npi_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (NPI)</a> |
-                                {% elif is_quality_user and tvf.current_phase.name in quality_phases_for_button %}
-                                    <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a> |
-                                {% elif is_logistics_user and tvf.current_phase.name in logistics_phases_for_button %}
-                                    <a href="{% url 'test_requests:logistics_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Logistics)</a> |
-                                {% else %}
-                                    <em>Not in your queue</em> |
-                                {% endif %}
+                            <th>TVF Number</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in quality_open_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name }}</td>
+                                <td>{{ tvf.customer.name }}</td>
+                                <td>{{ tvf.project.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a>
+                                    <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No TVFs currently open at Quality.</p>
+        {% endif %}
 
-                                {% if tvf.status.name != 'Completed' and tvf.status.name != 'Shipped' %}
-                                    {% if is_project_manager or is_npi_user or is_quality_user or is_logistics_user or is_coach %}
+        <h3 class="mt-4">TVFs Validated at Quality</h3>
+        {% if quality_validated_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr>
+                            <th>TVF Number</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in quality_validated_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name }}</td>
+                                <td>{{ tvf.customer.name }}</td>
+                                <td>{{ tvf.project.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a>
+                                    <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No TVFs currently validated at Quality.</p>
+        {% endif %}
+    {% endif %} {# End Quality User Sections #}
+
+    {# Logistics User Sections (Placeholders) #}
+    {% if is_logistics_user %}
+        <hr>
+        <h2>Logistics Workflow Stages</h2>
+        <h3>TVFs Open at Logistics</h3>
+        {% if logistics_open_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr>
+                            <th>TVF Number</th>
+                            <th>Name</th>
+                            <th>Customer</th>
+                            <th>Project</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in logistics_open_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name }}</td>
+                                <td>{{ tvf.customer.name }}</td>
+                                <td>{{ tvf.project.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:logistics_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Logistics)</a>
+                                    <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No TVFs currently open at Logistics.</p>
+        {% endif %}
+    {% endif %} {# End Logistics User Sections #}
+
+
+    {# Coach / Test Manager Section (Comprehensive View) #}
+    {% if is_coach or is_superuser %}
+        <hr>
+        <h2>Coach / Test Manager View (All Open TVFs)</h2>
+        <p>This view includes all open TVFs for comprehensive daily meetings.</p>
+        
+        {# Display specific NPI stages within the Coach view #}
+        <h3>NPI Workflow Stages (Coach View)</h3>
+        <h4>TVFs Released (Waiting for NPI Data Processing)</h4>
+        {% if npi_released_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in npi_released_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs waiting for NPI Data Processing.</p>{% endif %}
+
+        <h4>TVFs in DP Done State</h4>
+        {% if npi_dp_done_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in npi_dp_done_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs currently in DP Done state.</p>{% endif %}
+
+        <h4>TVFs Processed at NPI</h4>
+        {% if npi_processed_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in npi_processed_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs currently processed at NPI.</p>{% endif %}
+
+        {# Display specific Quality stages within the Coach view #}
+        <h3 class="mt-4">Quality Workflow Stages (Coach View)</h3>
+        <h4>TVFs Open at Quality</h4>
+        {% if quality_open_tvfs %}
+             <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in quality_open_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs currently open at Quality.</p>{% endif %}
+
+        <h4>TVFs Validated at Quality</h4>
+        {% if quality_validated_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in quality_validated_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs currently validated at Quality.</p>{% endif %}
+
+        {# Display specific Logistics stages within the Coach view #}
+        <h3 class="mt-4">Logistics Workflow Stages (Coach View)</h3>
+        <h4>TVFs Open at Logistics</h4>
+        {% if logistics_open_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-bordered">
+                    <thead>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in logistics_open_tvfs %}
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}<p>No TVFs currently open at Logistics.</p>{% endif %}
+
+
+        <h3 class="mt-5">All Other Open TVFs (Not in specific workflows above)</h3>
+        {% if other_open_tvfs %}
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>TVF Number</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Current Status</th>
+                            <th>Current Phase</th>
+                            <th>Comments</th>
+                            <th>Creation Date</th>
+                            <th>Ship Date</th>
+                            <th>Run Today?</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tvf in other_open_tvfs %}
+                            <tr>
+                                <td>{{ tvf.tvf_number }}</td>
+                                <td>{{ tvf.tvf_name|default:"N/A" }}</td>
+                                <td>{{ tvf.tvf_type.name|default:"N/A" }}</td>
+                                <td>{{ tvf.status.name|default:"N/A" }}</td>
+                                <td>{{ tvf.current_phase.name|default:"N/A" }}</td>
+                                <td>{{ tvf.comments|truncatechars:50|default:"-" }}</td>
+                                <td>{{ tvf.request_received_date|date:"Y-m-d H:i" }}</td>
+                                <td>{{ tvf.request_ship_date|date:"Y-m-d"|default:"N/A" }}</td>
+                                <td>
+                                    {% if tvf.run_today %}Yes{% else %}No{% endif %}
+                                </td>
+                                <td>
+                                    {# General update/reject buttons for other TVFs #}
+                                    {% if tvf.status.name != 'Completed' and tvf.status.name != 'Shipped' %}
+                                        {# Link to appropriate update view based on phase #}
+                                        {% if tvf.current_phase.name in npi_phases_for_button %}
+                                            <a href="{% url 'test_requests:npi_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (NPI)</a>
+                                        {% elif tvf.current_phase.name in quality_phases_for_button %}
+                                            <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a>
+                                        {% elif tvf.current_phase.name in logistics_phases_for_button %}
+                                            <a href="{% url 'test_requests:logistics_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Logistics)</a>
+                                        {% else %}
+                                            <a href="{% url 'test_requests:detail' tvf.pk %}" class="btn btn-info btn-sm">View</a>
+                                        {% endif %}
+                                        
                                         <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
                                     {% endif %}
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% else %}
-        <p>No other open TVFs found.</p>
-    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No other open TVFs found.</p>
+        {% endif %}
+    {% endif %} {# End Coach / Test Manager Section #}
+
 {% endblock %}
 
 {% block extra_js %}
