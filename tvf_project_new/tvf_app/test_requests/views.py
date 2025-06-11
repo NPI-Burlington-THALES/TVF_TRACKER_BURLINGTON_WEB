@@ -7,6 +7,7 @@ from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 from datetime import timedelta
 from django.utils import timezone
+from django import forms  # <--- ADD THIS LINE to import the forms module
 from django.forms import formset_factory # Not directly used for inlineformset_factory, but good to have if needed for standalone formsets.
 from django.db.models import Q # For OR queries in get_filtered_dispatch_methods
 
@@ -562,10 +563,20 @@ def logistics_update_tvf_view(request, tvf_id):
 
     shipping_instance, created = TestRequestShipping.objects.get_or_create(test_request=tvf)
 
+    # Create a form that only includes the tracking_number field
+    class LogisticsShippingForm(forms.ModelForm):
+        class Meta:
+            model = TestRequestShipping
+            fields = ['tracking_number'] # Only tracking_number for this simplified view
+            widgets = {
+                # Add any specific widgets needed for tracking_number here if necessary
+            }
+
     if request.method == 'POST':
         action = request.POST.get('action')
         comments = request.POST.get('comments', '')
-        shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
+        # Use the custom LogisticsShippingForm for validation
+        shipping_form = LogisticsShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
 
         if action == 'process':
             if shipping_form.is_valid():
@@ -588,7 +599,8 @@ def logistics_update_tvf_view(request, tvf_id):
             return redirect('test_requests:reject_tvf', tvf_id=tvf.pk)
 
     else:
-        shipping_form = TestRequestShippingForm(instance=shipping_instance, prefix='shipping')
+        # Pass the custom form to the template
+        shipping_form = LogisticsShippingForm(instance=shipping_instance, prefix='shipping')
 
     return render(request, 'test_requests/logistics_update_tvf.html', {
         'tvf': tvf,
