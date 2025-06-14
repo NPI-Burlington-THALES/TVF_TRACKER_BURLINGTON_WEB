@@ -1,17 +1,29 @@
 {# tvf_app/test_requests/templates/test_requests/test_request_list.html #}
 {% extends 'base.html' %}
 
-{% block title %}All Test Requests{% endblock %}
+{% block title %}TVF List - {{ title }}{% endblock %}
 
 {% block content %}
-<div class="card">
+<div class="card mb-4">
     <div class="card-header">
-        All Test Requests
+        Test Request Management
     </div>
     <div class="card-body">
-        <a href="{% url 'test_requests:create' %}" class="btn btn-primary mb-3">Create New Test Request</a>
+        <a href="{% url 'test_requests:create' %}" class="btn btn-primary mb-3 me-2">Create New TVF</a>
+        
+        {# Buttons to switch between Backlog and Shipped views #}
+        <a href="{% url 'test_requests:list' %}?view=backlog" class="btn {% if active_view == 'backlog' %}btn-info{% else %}btn-outline-info{% endif %} mb-3 me-2">Backlog TVFs</a>
+        <a href="{% url 'test_requests:list' %}?view=shipped" class="btn {% if active_view == 'shipped' %}btn-success{% else %}btn-outline-success{% endif %} mb-3">Shipped TVFs</a>
+    </div>
+</div>
 
-        {% if test_requests %}
+{# Display the selected TVF list #}
+<div class="card mb-4">
+    <div class="card-header">
+        {{ title }}
+    </div>
+    <div class="card-body">
+        {% if tvfs %}
             <div class="table-responsive">
                 <table class="table table-striped table-hover">
                     <thead>
@@ -22,12 +34,16 @@
                             <th>Project</th>
                             <th>Initiator</th>
                             <th>Status</th>
-                            <th>Created Date</th>
+                            <th>Creation Date</th>
+                            <th>Due Date</th>
+                            {% if active_view == 'shipped' %} {# Show Finished Date only for shipped view #}
+                            <th>Finished Date</th>
+                            {% endif %}
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for tr in test_requests %}
+                        {% for tr in tvfs %}
                         <tr>
                             <td>{{ tr.tvf_number }}</td>
                             <td>{{ tr.tvf_name }}</td>
@@ -35,10 +51,16 @@
                             <td>{{ tr.project.name }}</td>
                             <td>{{ tr.tvf_initiator.username }}</td>
                             <td>{{ tr.status.name }}</td>
-                            <td>{{ tr.date_created|date:"Y-m-d H:i" }}</td>
+                            <td>{{ tr.request_received_date|date:"Y-m-d H:i"|default:"N/A" }}</td>
+                            <td>{{ tr.request_ship_date|date:"Y-m-d H:i"|default:"N/A" }}</td>
+                            {% if active_view == 'shipped' %} {# Show Finished Date only for shipped view #}
+                            <td>{{ tr.tvf_completed_date|date:"Y-m-d H:i"|default:"N/A" }}</td>
+                            {% endif %}
                             <td>
                                 <a href="{% url 'test_requests:detail' pk=tr.pk %}" class="btn btn-info btn-sm">View</a>
+                                {% if active_view == 'backlog' %} {# Only allow edit for backlog items #}
                                 <a href="{% url 'test_requests:update' pk=tr.pk %}" class="btn btn-warning btn-sm">Edit</a>
+                                {% endif %}
                                 <a href="{% url 'test_requests:pdf' pk=tr.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a>
                             </td>
                         </tr>
@@ -47,7 +69,7 @@
                 </table>
             </div>
         {% else %}
-            <p>No test requests found. <a href="{% url 'test_requests:create' %}">Create one now!</a></p>
+            <p>No {{ title|lower }} found.</p>
         {% endif %}
     </div>
 </div>

@@ -34,13 +34,13 @@
             border-radius: 5px;
         }
        .section-content {
-            display: flex;
+            display: flex; /* xhtml2pdf has limited flexbox support, keep it simple */
             flex-wrap: wrap;
         }
        .field-pair {
             width: 48%; /* Approx half width for two columns */
             margin-bottom: 8px;
-            display: inline-block; /* For side-by-side layout */
+            display: inline-block; /* Use inline-block for better compatibility */
             vertical-align: top;
         }
        .field-pair strong {
@@ -83,26 +83,22 @@
             margin-top: 50px;
             display: inline-block;
         }
-       .page-footer {
-            position: running(footer);
+        /* Removed .page-footer and @page rules as they cause errors in xhtml2pdf */
+       .simple-footer {
+            margin-top: 50px;
             text-align: center;
             font-size: 9px;
             color: #777;
-        }
-        @page {
-            @bottom-center {
-                content: element(page-footer);
-            }
-        }
-       .page-number:before {
-            content: "Page " counter(page) " of " counter(pages);
+            width: 100%;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="page-footer">
-        <span class="page-number"></span> - Generated on {{ current_date|date:"Y-m-d H:i" }}
-    </div>
+    {# The page-footer is now a simple div at the end of the content #}
+    {# If you need page numbers, xhtml2pdf often requires specific HTML/CSS for that, #}
+    {# but for basic content, placing it at the end of the body is sufficient. #}
 
     <h1>Test Validation Form (Client Test)</h1>
 
@@ -231,11 +227,15 @@
                 <div class="field-pair"><strong>Shipping Sign Off:</strong> {{ shipping.shipping_sign_off_by.username|default:"N/A" }}</div>
                 <div class="field-pair"><strong>Date Shipped:</strong> {{ shipping.date_shipped|date:"Y-m-d H:i"|default:"N/A" }}</div>
                 <div class="full-width-field"><strong>Ship To Address:</strong> <pre>{{ shipping.ship_to_address|default:"N/A" }}</pre></div>
+                <div class="full-width-field"><strong>Tracking Number:</strong> {{ shipping.tracking_number|default:"N/A" }}</div> {# Added tracking number #}
             </div>
         {% else %}
             <p>No shipping details available.</p>
         {% endif %}
     {% endwith %}
 
+    <div class="simple-footer">
+        Generated on {{ current_date|date:"Y-m-d H:i" }}
+    </div>
 </body>
 </html>
