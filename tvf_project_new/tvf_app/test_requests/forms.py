@@ -9,7 +9,7 @@ from .models import (
     TestRequestQuality, TestRequestShipping, RejectReason, TrustportFolder
 )
 from django.contrib.auth.models import User
-from django.contrib.auth import get_user_model # Corrected import here
+from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from django.utils import timezone
 from django.core.exceptions import ValidationError # For custom validation
@@ -140,31 +140,6 @@ class TestRequestForm(forms.ModelForm):
             ).order_by('folder_path')
         else:
             self.fields['trustport_folder_actual'].queryset = TrustportFolder.objects.none()
-
-    def clean(self):
-        cleaned_data = super().clean()
-        customer = cleaned_data.get('customer')
-        tvf_environment = cleaned_data.get('tvf_environment')
-        project = cleaned_data.get('project')
-
-        # Only perform this cross-field validation if all three fields have valid values
-        # (meaning they passed their individual field validations)
-        if customer and tvf_environment and project:
-            # Check if the selected project actually belongs to the selected customer and environment
-            if not Project.objects.filter(
-                id=project.id,
-                customer=customer,
-                tvf_environment=tvf_environment
-            ).exists():
-                # Add an error to the 'project' field specifically
-                self.add_error(
-                    'project', 
-                    "The selected project is not valid for the chosen customer and environment."
-                )
-        
-        # Always return cleaned_data, even if validation fails
-        return cleaned_data
-
 
 # --- TestRequestPlasticCodeForm (for inline formset) ---
 class TestRequestPlasticCodeForm(forms.ModelForm):
