@@ -54,6 +54,7 @@
                                 <td>
                                     <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a>
                                     <a href="{% url 'test_requests:detail' pk=tvf.pk %}" class="btn btn-info btn-sm">View</a>
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -90,6 +91,7 @@
                                 <td>{{ tvf.current_phase.name }}</td>
                                 <td>
                                     <a href="{% url 'test_requests:detail' pk=tvf.pk %}" class="btn btn-info btn-sm">View</a>
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -133,6 +135,8 @@
                                         {% csrf_token %}
                                         <button type="submit" name="action" value="dp_done" class="btn btn-primary btn-sm">DP Done</button>
                                     </form>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <form method="post" action="{% url 'test_requests:reject_tvf' tvf.pk %}" style="display:inline;">
                                         {% csrf_token %}
                                         <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm">Reject</button>
@@ -173,6 +177,8 @@
                                         <button type="submit" name="action" value="tvf_output" class="btn btn-success btn-sm">TVF Output</button>
                                         <button type="submit" name="action" value="back_to_released" class="btn btn-secondary btn-sm">Back to Released</button>
                                     </form>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <form method="post" action="{% url 'test_requests:reject_tvf' tvf.pk %}" style="display:inline;">
                                         {% csrf_token %}
                                         <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm">Reject</button>
@@ -213,6 +219,8 @@
                                         <button type="submit" name="action" value="push_to_qa" class="btn btn-primary btn-sm">Push to QA</button>
                                         <button type="submit" name="action" value="back_to_dp_done" class="btn btn-secondary btn-sm">Back to DP Done</button>
                                     </form>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <form method="post" action="{% url 'test_requests:reject_tvf' tvf.pk %}" style="display:inline;">
                                         {% csrf_token %}
                                         <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm">Reject</button>
@@ -254,6 +262,8 @@
                                 <td>{{ tvf.project.name }}</td>
                                 <td>
                                     <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
                                 </td>
                             </tr>
@@ -287,6 +297,8 @@
                                 <td>{{ tvf.project.name }}</td>
                                 <td>
                                     <a href="{% url 'test_requests:quality_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Quality)</a>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
                                 </td>
                             </tr>
@@ -325,6 +337,8 @@
                                 <td>{{ tvf.project.name }}</td>
                                 <td>
                                     <a href="{% url 'test_requests:logistics_update_tvf' tvf.pk %}" class="btn btn-info btn-sm">Update (Logistics)</a>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# ADDED Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# ADDED PDF Button #}
                                     <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
                                 </td>
                             </tr>
@@ -351,11 +365,16 @@
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in npi_released_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -367,11 +386,16 @@
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in npi_dp_done_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -383,11 +407,16 @@
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in npi_processed_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -401,11 +430,16 @@
              <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in quality_open_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -417,11 +451,16 @@
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in quality_validated_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -435,11 +474,16 @@
             <div class="table-responsive">
                 <table class="table table-striped table-hover table-bordered">
                     <thead>
-                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th></tr>
+                        <tr><th>TVF #</th><th>Name</th><th>Customer</th><th>Project</th><th>Current Phase</th><th>Status</th><th>Actions</th></tr> {# Added Actions column header #}
                     </thead>
                     <tbody>
                         {% for tvf in logistics_open_tvfs %}
-                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td></tr>
+                            <tr><td>{{ tvf.tvf_number }}</td><td>{{ tvf.tvf_name }}</td><td>{{ tvf.customer.name }}</td><td>{{ tvf.project.name }}</td><td>{{ tvf.current_phase.name }}</td><td>{{ tvf.status.name }}</td>
+                                <td>
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -495,6 +539,8 @@
                                         
                                         <a href="{% url 'test_requests:reject_tvf' tvf.pk %}" class="btn btn-danger btn-sm">Reject</a>
                                     {% endif %}
+                                    <a href="{% url 'test_requests:update' pk=tvf.pk %}" class="btn btn-warning btn-sm">Edit</a> {# Added Edit Button #}
+                                    <a href="{% url 'test_requests:pdf' pk=tvf.pk %}" class="btn btn-secondary btn-sm" target="_blank">PDF</a> {# Added PDF Button #}
                                 </td>
                             </tr>
                         {% endfor %}
