@@ -7,19 +7,18 @@ from django.db import transaction
 from django.contrib.auth.decorators import login_required, user_passes_test
 from datetime import timedelta
 from django.utils import timezone
-from django import forms
-from django.forms import formset_factory
-from django.db.models import Q
+from django import forms  # <--- ADD THIS LINE to import the forms module
+from django.forms import formset_factory # Not directly used for inlineformset_factory, but good to have if needed for standalone formsets.
+from django.db.models import Q # For OR queries in get_filtered_dispatch_methods
 
 # Import your models and forms
 from .models import (
     TestRequest, Customer, Project, TVFType, TVFEnvironment, TVFStatus,
     PlasticCodeLookup, DispatchMethod, TestRequestPhaseDefinition,
     TestRequestPlasticCode, TestRequestInputFile, TestRequestPAN,
-    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason,
-    # TestRequestPhaseLog # Uncomment if you plan to use this for detailed comments
+    TestRequestQuality, TestRequestShipping, TrustportFolder, RejectReason
 )
-from .forms import (
+from .forms import ( # This block imports all necessary forms
     CustomUserCreationForm,
     TestRequestForm,
     TestRequestPlasticCodeForm,
@@ -165,42 +164,18 @@ def get_sla_and_calculate_ship_date(request):
 @login_required
 @user_passes_test(can_view_dashboard, login_url='test_requests:access_denied')
 def coach_dashboard(request):
-    # Define common statuses and phases
-    # Phases
-    pm_draft_phase_name = 'PM_DRAFT'
-    project_manager_phase_name = 'PROJECT_MANAGER' # From user's DB dump ID 18
+    open_statuses = TVFStatus.objects.exclude(name__in=['Completed', 'Shipped', 'Rejected']).values_list('name', flat=True)
+    
+    # Define common phase names for filtering
+    pm_phase_name = 'Project Manager' # Used for TVFs rejected back to PM
+    pm_draft_phase_name = 'PM_DRAFT' # New phase for initial drafts
     tvf_released_phase_name = 'TVF_RELEASED'
     tvf_dp_done_phase_name = 'TVF_DP_DONE'
     tvf_processed_at_npi_phase_name = 'TVF_PROCESSED_AT_NPI'
     tvf_open_at_qa_phase_name = 'TVF_OPEN_AT_QA'
     tvf_validated_at_qa_phase_name = 'TVF_VALIDATED_AT_QA'
     tvf_open_at_logistics_phase_name = 'TVF_OPEN_AT_LOGISTICS'
-    tvf_shipped_phase_name = 'TVF_SHIPPED' 
-    tvf_completed_phase_name = 'TVF_COMPLETED' # Use phase name for completed
-    tvf_cancelled_phase_name = 'TVF_CANCELLED' # Use phase name for cancelled
-
-    rework_at_pm_phase_name = 'REWORK_AT_PM'
-    rework_at_prod_phase_name = 'REWORK_AT_PROD' 
-    rework_at_logistics_phase_name = 'REWORK_AT_LOGISTICS'
-    rework_at_qa_phase_name = 'REWORK_AT_QA'
-
-    # Statuses
-    status_draft = 'Draft'
-    status_submitted = 'TVF_SUBMITTED'
-    status_dp_done = 'DP Done'
-    status_tvf_processed = 'TVF Processed'
-    status_open_at_qa = 'Open at QA'
-    status_validated = 'Validated'
-    status_open_at_logistics = 'Open at Logistics'
-    status_shipped = 'Shipped'
-    status_completed = 'Completed'
-    status_cancelled = 'Cancelled'
-    status_rejected_pm = 'Rejected to PM'
-    status_rejected_npi = 'Rejected to NPI'
-    status_rejected_quality = 'Rejected to Quality'
-    status_rejected_logistics = 'Rejected to Logistics'
-
-
+    
     # Initialize all TVF lists as empty
     pm_draft_tvfs = TestRequest.objects.none()
     pm_submitted_tvfs = TestRequest.objects.none()
@@ -210,65 +185,58 @@ def coach_dashboard(request):
     quality_open_tvfs = TestRequest.objects.none()
     quality_validated_tvfs = TestRequest.objects.none()
     logistics_open_tvfs = TestRequest.objects.none()
-    
-    # For Coach/Superuser only
-    all_display_tvfs = TestRequest.objects.none()
-    completed_tvfs_list = TestRequest.objects.none()
-
+    other_open_tvfs = TestRequest.objects.none()
+    all_open_tvfs_for_coach = TestRequest.objects.none()
 
     # Role-based filtering of TVFs
     if is_project_manager(request.user):
+        # PMs see their own drafts and submitted TVFs based on current phase AND status
         user_tvfs = TestRequest.objects.filter(tvf_initiator=request.user)
-        pm_draft_tvfs = user_tvfs.filter(status__name=status_draft, current_phase__name=pm_draft_phase_name)
-        
-        pm_submitted_tvfs = TestRequest.objects.filter(
-            Q(tvf_initiator=request.user, current_phase__name=tvf_released_phase_name, status__name=status_submitted) | 
-            Q(current_phase__name=project_manager_phase_name, status__name=status_rejected_pm, is_rejected=True) | 
-            Q(current_phase__name=rework_at_pm_phase_name, status__name=status_rejected_pm, is_rejected=True) 
-        ).order_by('-request_received_date')
+        pm_draft_tvfs = user_tvfs.filter(status__name='Draft', current_phase__name=pm_draft_phase_name)
+        pm_submitted_tvfs = user_tvfs.filter(status__name='TVF_SUBMITTED', current_phase__name=tvf_released_phase_name)
         
     elif is_npi_user(request.user):
-        npi_released_tvfs = TestRequest.objects.filter(
-            Q(current_phase__name=tvf_released_phase_name, status__name=status_submitted) |
-            Q(current_phase__name=rework_at_prod_phase_name, status__name=status_rejected_npi, is_rejected=True)
-        ).order_by('-request_received_date')
-
-        npi_dp_done_tvfs = TestRequest.objects.filter(current_phase__name=tvf_dp_done_phase_name, status__name=status_dp_done).order_by('-request_received_date')
-        npi_processed_tvfs = TestRequest.objects.filter(current_phase__name=tvf_processed_at_npi_phase_name, status__name=status_tvf_processed).order_by('-request_received_date')
+        # NPI users see TVFs in their specific NPI phases
+        npi_released_tvfs = TestRequest.objects.filter(current_phase__name=tvf_released_phase_name)
+        npi_dp_done_tvfs = TestRequest.objects.filter(current_phase__name=tvf_dp_done_phase_name)
+        npi_processed_tvfs = TestRequest.objects.filter(current_phase__name=tvf_processed_at_npi_phase_name)
         
     elif is_quality_user(request.user):
-        quality_open_tvfs = TestRequest.objects.filter(
-            Q(current_phase__name=tvf_open_at_qa_phase_name, status__name=status_open_at_qa) |
-            Q(current_phase__name=rework_at_qa_phase_name, status__name=status_rejected_quality, is_rejected=True)
-        ).order_by('-request_received_date')
-
-        quality_validated_tvfs = TestRequest.objects.filter(current_phase__name=tvf_validated_at_qa_phase_name, status__name=status_validated).order_by('-request_received_date')
+        # Quality users see TVFs in their specific Quality phases
+        quality_open_tvfs = TestRequest.objects.filter(current_phase__name=tvf_open_at_qa_phase_name)
+        quality_validated_tvfs = TestRequest.objects.filter(current_phase__name=tvf_validated_at_qa_phase_name)
         
     elif is_logistics_user(request.user):
-        logistics_open_tvfs = TestRequest.objects.filter(
-            Q(current_phase__name=tvf_open_at_logistics_phase_name, status__name=status_open_at_logistics) |
-            Q(current_phase__name=rework_at_logistics_phase_name, status__name=status_rejected_logistics, is_rejected=True)
-        ).order_by('-request_received_date')
+        # Logistics users see TVFs in their specific Logistics phase
+        logistics_open_tvfs = TestRequest.objects.filter(current_phase__name=tvf_open_at_logistics_phase_name)
         
     elif is_coach(request.user) or request.user.is_superuser:
-        # Coaches/Superusers main display: All TVFs not yet completed or cancelled
-        all_display_tvfs = TestRequest.objects.select_related(
-            'customer', 'project', 'tvf_initiator', 'status', 'current_phase'
-        ).exclude(
-            Q(current_phase__name=tvf_completed_phase_name) | Q(current_phase__name=tvf_cancelled_phase_name)
-        ).order_by('-request_received_date')
+        # Coaches/Superusers see all open TVFs and all categorized sections
+        all_open_tvfs_for_coach = TestRequest.objects.filter(status__name__in=open_statuses).order_by('-request_received_date')
 
-        # Also get completed TVFs for the separate "View Completed TVFs" list
-        completed_tvfs_list = TestRequest.objects.select_related(
-            'customer', 'project', 'tvf_initiator', 'status', 'current_phase'
-        ).filter(
-            Q(current_phase__name=tvf_completed_phase_name) | Q(current_phase__name=tvf_shipped_phase_name) | Q(current_phase__name=tvf_cancelled_phase_name)
-        ).order_by('-tvf_completed_date') # Order by completion date
+        npi_released_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_released_phase_name)
+        npi_dp_done_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_dp_done_phase_name)
+        npi_processed_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_processed_at_npi_phase_name)
 
-    # Phase lists for general update button conditions (used in tables for coach)
-    npi_phases_for_button = [tvf_released_phase_name, tvf_dp_done_phase_name, tvf_processed_at_npi_phase_name, rework_at_prod_phase_name]
-    quality_phases_for_button = [tvf_open_at_qa_phase_name, tvf_validated_at_qa_phase_name, rework_at_qa_phase_name]
-    logistics_phases_for_button = [tvf_open_at_logistics_phase_name, rework_at_logistics_phase_name]
+        quality_open_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_open_at_qa_phase_name)
+        quality_validated_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_validated_at_qa_phase_name)
+
+        logistics_open_tvfs = all_open_tvfs_for_coach.filter(current_phase__name=tvf_open_at_logistics_phase_name)
+
+        # Calculate other_open_tvfs only for Coach/Superuser
+        categorized_tvf_ids = list(npi_released_tvfs.values_list('id', flat=True)) + \
+                              list(npi_dp_done_tvfs.values_list('id', flat=True)) + \
+                              list(npi_processed_tvfs.values_list('id', flat=True)) + \
+                              list(quality_open_tvfs.values_list('id', flat=True)) + \
+                              list(quality_validated_tvfs.values_list('id', flat=True)) + \
+                              list(logistics_open_tvfs.values_list('id', flat=True))
+        other_open_tvfs = all_open_tvfs_for_coach.exclude(id__in=categorized_tvf_ids)
+
+
+    # Phase lists for general update button conditions (if used in 'other_open_tvfs' table)
+    npi_phases_for_button = [tvf_released_phase_name, tvf_dp_done_phase_name, tvf_processed_at_npi_phase_name]
+    quality_phases_for_button = [tvf_open_at_qa_phase_name, tvf_validated_at_qa_phase_name]
+    logistics_phases_for_button = [tvf_open_at_logistics_phase_name]
 
     context = {
         'role': 'Coach Dashboard',
@@ -279,125 +247,39 @@ def coach_dashboard(request):
         'is_coach': is_coach(request.user),
         'is_superuser': request.user.is_superuser,
 
-        # For Coach/Superuser: main display list and completed list
-        'all_display_tvfs': all_display_tvfs, 
-        'completed_tvfs_list': completed_tvfs_list, 
-
-        # PM specific lists (empty if not PM)
+        # PM specific lists
         'pm_draft_tvfs': pm_draft_tvfs,
-        'pm_submitted_tvfs': pm_submitted_tvfs, 
+        'pm_submitted_tvfs': pm_submitted_tvfs,
         
-        # NPI specific lists (empty if not NPI)
+        # NPI specific lists (always passed, but conditionally displayed in HTML)
         'npi_released_tvfs': npi_released_tvfs,
         'npi_dp_done_tvfs': npi_dp_done_tvfs,
         'npi_processed_tvfs': npi_processed_tvfs,
         
-        # Quality specific lists (empty if not Quality)
+        # Quality specific lists (always passed, but conditionally displayed in HTML)
         'quality_open_tvfs': quality_open_tvfs,
         'quality_validated_tvfs': quality_validated_tvfs,
 
-        # Logistics specific lists (empty if not Logistics)
+        # Logistics specific lists (always passed, but conditionally displayed in HTML)
         'logistics_open_tvfs': logistics_open_tvfs,
 
-        # Coach specific lists (empty if not Coach/Superuser)
-        'other_open_tvfs': TestRequest.objects.none(), # This will be unused now, handled by all_display_tvfs
+        # Other open TVFs (only calculated for Coach/Superuser, otherwise empty)
+        'other_open_tvfs': other_open_tvfs,
 
-        # Phase lists for button conditions (used in tables for coach)
+        # All open TVFs (only for Coach/Superuser for general table)
+        'all_open_tvfs_for_coach': all_open_tvfs_for_coach,
+
+        # Phase lists for button conditions (used in general table for coach)
         'npi_phases_for_button': npi_phases_for_button,       
         'quality_phases_for_button': quality_phases_for_button, 
-        'logistics_phases_for_button': logistics_phases_for_button,
+        'logistics_phases_for_button': logistics_phases_for_button, 
     }
     return render(request, 'test_requests/coach_dashboard.html', context)
 
 
-# --- Coach Action: Mark TVF as Completed ---
-@login_required
-@user_passes_test(lambda u: is_coach(u) or u.is_superuser, login_url='test_requests:access_denied')
-def mark_tvf_completed_view(request, tvf_id):
-    tvf = get_object_or_404(TestRequest, pk=tvf_id)
-
-    # Only allow marking as completed if it's currently in 'Shipped' status/phase
-    if tvf.current_phase.name != 'TVF_SHIPPED' or tvf.status.name != 'Shipped':
-        messages.error(request, f"TVF {tvf.tvf_number} cannot be marked as completed unless it is in 'Shipped' status/phase.")
-        return redirect('test_requests:coach_dashboard')
-
-    if request.method == 'POST':
-        comments_input = request.POST.get('comments', '').strip()
-        
-        try:
-            with transaction.atomic():
-                tvf.status, _ = TVFStatus.objects.get_or_create(name='Completed')
-                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_COMPLETED', defaults={'order': 8})
-                tvf.tvf_completed_date = timezone.now()
-                # Append completion comments
-                current_comments = tvf.comments if tvf.comments else ""
-                tvf.comments = f"{current_comments}\n\nCOMPLETED by {request.user.username}: {comments_input}"
-                tvf.save()
-                messages.success(request, f"TVF {tvf.tvf_number} marked as Completed.")
-        except Exception as e:
-            messages.error(request, f"Error marking TVF as completed: {e}")
-        return redirect('test_requests:coach_dashboard')
-    
-    # If GET request, show a confirmation page (or just redirect back to dashboard)
-    # For simplicity, if it's a GET, just redirect for now. A real app might have a modal.
-    messages.info(request, "Please confirm completion via POST action.")
-    return redirect('test_requests:coach_dashboard')
-
-# --- Coach Action: Delete TVF ---
-@login_required
-@user_passes_test(lambda u: u.is_superuser, login_url='test_requests:access_denied') # Only superusers can delete
-def delete_tvf_view(request, tvf_id):
-    tvf = get_object_or_404(TestRequest, pk=tvf_id)
-
-    if request.method == 'POST':
-        try:
-            tvf_number = tvf.tvf_number
-            tvf.delete()
-            messages.success(request, f"TVF {tvf_number} permanently deleted.")
-        except Exception as e:
-            messages.error(request, f"Error deleting TVF {tvf_number}: {e}")
-        return redirect('test_requests:coach_dashboard')
-    
-    # For GET request, render a confirmation page/modal
-    return render(request, 'test_requests/confirm_delete_tvf.html', {'tvf': tvf}) # You'll need to create this template
-
-
-# --- Coach Action: Cancel TVF ---
-@login_required
-@user_passes_test(lambda u: is_coach(u) or u.is_superuser, login_url='test_requests:access_denied')
-def cancel_tvf_view(request, tvf_id):
-    tvf = get_object_or_404(TestRequest, pk=tvf_id)
-
-    # Prevent cancelling already completed/shipped/cancelled TVFs
-    if tvf.status.name in ['Completed', 'Shipped', 'Cancelled']: # Check status names
-        messages.error(request, f"TVF {tvf.tvf_number} cannot be cancelled as it is already in a final state.")
-        return redirect('test_requests:coach_dashboard')
-
-    if request.method == 'POST':
-        comments_input = request.POST.get('comments', '').strip()
-
-        try:
-            with transaction.atomic():
-                tvf.status, _ = TVFStatus.objects.get_or_create(name='Cancelled') # Set status to 'Cancelled'
-                tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_CANCELLED', defaults={'order': 9})
-                tvf.is_rejected = False # Clear rejected status if it was
-                # Append cancellation comments
-                current_comments = tvf.comments if tvf.comments else ""
-                tvf.comments = f"{current_comments}\n\nCANCELLED by {request.user.username}: {comments_input}"
-                tvf.tvf_completed_date = timezone.now() # Mark as completed for archiving purposes
-                tvf.save()
-                messages.success(request, f"TVF {tvf.tvf_number} has been cancelled.")
-        except Exception as e:
-            messages.error(request, f"Error cancelling TVF: {e}")
-        return redirect('test_requests:coach_dashboard')
-    
-    # For GET request, render a confirmation page/modal
-    return render(request, 'test_requests/confirm_cancel_tvf.html', {'tvf': tvf}) # You'll need to create this template
-
-
 # --- Project Manager View: Create TVF ---
 @login_required
-# Removed @user_passes_test(is_project_manager, login_url='test_requests:access_denied')
+@user_passes_test(is_project_manager, login_url='test_requests:access_denied')
 def create_tvf_view(request):
     if request.method == 'POST':
         form = TestRequestForm(request.POST)
@@ -559,8 +441,8 @@ def npi_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
     # NPI relevant phases now start with TVF_RELEASED
-    npi_relevant_phases = ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'REWORK_AT_PROD'] # Include rework phase
-    if not (tvf.current_phase.name in npi_relevant_phases or (tvf.is_rejected and tvf.current_phase.name == 'REWORK_AT_PROD')):
+    npi_relevant_phases = ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'Rejected to NPI']
+    if not (tvf.current_phase.name in npi_relevant_phases or tvf.status.name == 'Rejected to NPI'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your NPI queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
@@ -569,11 +451,10 @@ def npi_update_tvf_view(request, tvf_id):
         comments = request.POST.get('comments', '') 
 
         if action == 'dp_done':
-            if tvf.current_phase.name in ['TVF_RELEASED', 'REWORK_AT_PROD']: # From TVF_RELEASED or REWORK_AT_PROD to TVF_DP_DONE
+            if tvf.current_phase.name == 'TVF_RELEASED': # From TVF_RELEASED to TVF_DP_DONE
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='DP Done')
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_DP_DONE', defaults={'order': 3})
                 tvf.comments = comments
-                tvf.is_rejected = False # Clear rejected status
                 tvf.save()
                 messages.success(request, f"TVF {tvf.tvf_number} marked as DP Done.")
                 return redirect('test_requests:coach_dashboard')
@@ -585,7 +466,6 @@ def npi_update_tvf_view(request, tvf_id):
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF Processed')
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_PROCESSED_AT_NPI', defaults={'order': 4})
                 tvf.comments = comments
-                tvf.is_rejected = False # Clear rejected status
                 tvf.save()
                 messages.success(request, f"TVF {tvf.tvf_number} output processed. Ready for QA.")
                 return redirect('test_requests:coach_dashboard')
@@ -597,7 +477,6 @@ def npi_update_tvf_view(request, tvf_id):
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='Open at QA')
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_OPEN_AT_QA', defaults={'order': 5})
                 tvf.comments = comments
-                tvf.is_rejected = False # Clear rejected status
                 tvf.save()
                 messages.success(request, f"TVF {tvf.tvf_number} pushed to Quality queue!")
                 return redirect('test_requests:coach_dashboard')
@@ -605,11 +484,10 @@ def npi_update_tvf_view(request, tvf_id):
                 messages.warning(request, "Cannot push to QA in the current phase.")
 
         elif action == 'back_to_released': # New action: Back to Released
-            if tvf.current_phase.name in ['TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI'] or tvf.current_phase.name == 'REWORK_AT_PROD':
+            if tvf.current_phase.name in ['TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI']:
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED') # Revert status to submitted
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
                 tvf.comments = comments
-                tvf.is_rejected = False # Clear rejected status
                 tvf.save()
                 messages.info(request, f"TVF {tvf.tvf_number} moved back to Released state.")
                 return redirect('test_requests:coach_dashboard')
@@ -617,11 +495,10 @@ def npi_update_tvf_view(request, tvf_id):
                 messages.warning(request, "Cannot move back to Released from current phase.")
 
         elif action == 'back_to_dp_done': # New action: Back to DP Done (from Processed)
-            if tvf.current_phase.name == 'TVF_PROCESSED_AT_NPI' or tvf.current_phase.name == 'REWORK_AT_PROD':
+            if tvf.current_phase.name == 'TVF_PROCESSED_AT_NPI':
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='DP Done') # Revert status
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_DP_DONE', defaults={'order': 3})
                 tvf.comments = comments
-                tvf.is_rejected = False # Clear rejected status
                 tvf.save()
                 messages.info(request, f"TVF {tvf.tvf_number} moved back to DP Done state.")
                 return redirect('test_requests:coach_dashboard')
@@ -640,8 +517,8 @@ def npi_update_tvf_view(request, tvf_id):
 def quality_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    quality_relevant_phases = ['TVF_OPEN_AT_QA', 'TVF_VALIDATED_AT_QA', 'REWORK_AT_QA'] # Include rework phase
-    if not (tvf.current_phase.name in quality_relevant_phases or (tvf.is_rejected and tvf.current_phase.name == 'REWORK_AT_QA')):
+    quality_relevant_phases = ['TVF_OPEN_AT_QA', 'TVF_VALIDATED_AT_QA', 'Rejected to Quality']
+    if not (tvf.current_phase.name in quality_relevant_phases or tvf.status.name == 'Rejected to Quality'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your Quality queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
@@ -650,7 +527,7 @@ def quality_update_tvf_view(request, tvf_id):
         comments = request.POST.get('comments', '')
 
         if action == 'process': # This button will now advance through QA steps
-            if tvf.current_phase.name in ['TVF_OPEN_AT_QA', 'REWORK_AT_QA']: # From TVF_OPEN_AT_QA or REWORK_AT_QA to TVF_VALIDATED_AT_QA
+            if tvf.current_phase.name == 'TVF_OPEN_AT_QA': # From TVF_OPEN_AT_QA to TVF_VALIDATED_AT_QA
                 tvf.status, _ = TVFStatus.objects.get_or_create(name='Validated')
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_VALIDATED_AT_QA', defaults={'order': 6})
                 messages.success(request, f"TVF {tvf.tvf_number} marked as Validated at Quality!")
@@ -679,8 +556,8 @@ def quality_update_tvf_view(request, tvf_id):
 def logistics_update_tvf_view(request, tvf_id):
     tvf = get_object_or_404(TestRequest, pk=tvf_id)
 
-    logistics_relevant_phases = ['TVF_OPEN_AT_LOGISTICS', 'REWORK_AT_LOGISTICS'] # Include rework phase
-    if not (tvf.current_phase.name in logistics_relevant_phases or (tvf.is_rejected and tvf.current_phase.name == 'REWORK_AT_LOGISTICS')):
+    logistics_relevant_phases = ['TVF_OPEN_AT_LOGISTICS', 'Rejected to Logistics']
+    if not (tvf.current_phase.name in logistics_relevant_phases or tvf.status.name == 'Rejected to Logistics'):
         messages.warning(request, f"TVF {tvf.tvf_number} is not in your Logistics queue for editing.")
         return redirect('test_requests:coach_dashboard')
 
@@ -691,7 +568,9 @@ def logistics_update_tvf_view(request, tvf_id):
         class Meta:
             model = TestRequestShipping
             fields = ['tracking_number'] # Only tracking_number for this simplified view
-            # No widgets needed here as date_shipped is set programmatically
+            widgets = {
+                # Add any specific widgets needed for tracking_number here if necessary
+            }
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -740,7 +619,7 @@ def reject_tvf_view(request, tvf_id):
         messages.error(request, "You do not have permission to reject TVFs.")
         return redirect('test_requests:coach_dashboard')
 
-    if tvf.status.name in ['Completed', 'Shipped', 'Cancelled']: # Added Cancelled here
+    if tvf.status.name in ['Shipped', 'Completed']:
         messages.error(request, f"TVF {tvf.tvf_number} cannot be rejected as it is already {tvf.status.name}.")
         return redirect('test_requests:coach_dashboard')
 
@@ -765,20 +644,20 @@ def reject_tvf_view(request, tvf_id):
 
         try:
             status_map = {
-                'PM_DRAFT': 'Rejected to PM',
-                'PROJECT_MANAGER': 'Rejected to PM', # Rejection to PROJECT_MANAGER phase should also set 'Rejected to PM' status
-                'REWORK_AT_PM': 'Rejected to PM', 
+                'Project Manager': 'Rejected to PM',
+                'PM_DRAFT': 'Rejected to PM', # Rejection to draft phase, status still Rejected to PM
                 'TVF_RELEASED': 'Rejected to NPI',
                 'TVF_DP_DONE': 'Rejected to NPI',
                 'TVF_PROCESSED_AT_NPI': 'Rejected to NPI',
-                'REWORK_AT_PROD': 'Rejected to NPI', 
                 'TVF_OPEN_AT_QA': 'Rejected to Quality',
                 'TVF_VALIDATED_AT_QA': 'Rejected to Quality',
-                'REWORK_AT_QA': 'Rejected to Quality', 
                 'TVF_OPEN_AT_LOGISTICS': 'Rejected to Logistics',
-                'REWORK_AT_LOGISTICS': 'Rejected to Logistics', 
+                'REWORK_AT_PM': 'Rejected',
+                'REWORK_AT_PROD': 'Rejected',
+                'REWORK_AT_LOGISTICS': 'Rejected',
+                'REWORK_AT_QA': 'Rejected',
             }
-            new_status_name = status_map.get(target_phase_name, 'Rejected') # Default to generic 'Rejected' if not mapped
+            new_status_name = status_map.get(target_phase_name, 'Rejected')
 
             target_status, _ = TVFStatus.objects.get_or_create(name=new_status_name)
             target_phase = TestRequestPhaseDefinition.objects.get(name=target_phase_name)
@@ -809,8 +688,6 @@ def reject_tvf_view(request, tvf_id):
     available_phases = TestRequestPhaseDefinition.objects.all().order_by('order')
     reject_reasons = RejectReason.objects.all().order_by('reason')
 
-    # Ensure to pass the correct target_phase_name based on TVF's current phase for initial selection
-    # For now, it will list all available phases for rejection
     return render(request, 'test_requests/reject_tvf.html', {
         'tvf': tvf,
         'available_phases': available_phases,
@@ -832,29 +709,9 @@ def test_request_create_view(request):
 
 @login_required
 def test_request_list_view(request):
-    view_type = request.GET.get('view', 'backlog') # Default to 'backlog'
-
-    if view_type == 'shipped':
-        tvfs_to_display = TestRequest.objects.select_related(
-            'customer', 'project', 'tvf_initiator', 'status', 'current_phase'
-        ).filter(
-            status__name='Shipped'
-        ).order_by('-tvf_completed_date')
-        active_view = 'shipped'
-        title = "Shipped TVFs"
-    else: # 'backlog' or any other value
-        tvfs_to_display = TestRequest.objects.select_related(
-            'customer', 'project', 'tvf_initiator', 'status', 'current_phase'
-        ).exclude(
-            Q(status__name='Shipped') | Q(status__name='Completed') | Q(status__name='Rejected') | Q(current_phase__name='TVF_CANCELLED')
-        ).order_by('-request_received_date')
-        active_view = 'backlog'
-        title = "Backlog TVFs (Open / Pending)"
-
+    test_requests = TestRequest.objects.all().select_related('customer', 'project', 'tvf_initiator', 'status').order_by('-tvf_number')
     context = {
-        'tvfs': tvfs_to_display,
-        'active_view': active_view,
-        'title': title,
+        'test_requests': test_requests
     }
     return render(request, 'test_requests/test_request_list.html', context)
 
@@ -866,54 +723,26 @@ def test_request_detail_view(request, pk):
         'plastic_codes_entries__plastic_code_lookup',
         'input_files_entries__pans',
         'quality_details',
-        'shipping_details__dispatch_method',
-        'phase_logs', # Fetch phase logs for detailed comments
+        'shipping_details__dispatch_method'
     ), pk=pk)
 
     context = {
-        'test_request': test_request,
-        'is_coach_or_superuser': is_coach(request.user) or request.user.is_superuser,
-        # You can add more context here if certain buttons are only visible based on specific roles
+
+        'test_request': test_request
     }
     return render(request, 'test_requests/test_request_detail.html', context)
 
 @login_required
 def test_request_update_view(request, pk):
-    tvf = get_object_or_404(TestRequest, pk=pk)
+    test_request = get_object_or_404(TestRequest, pk=pk)
 
-    quality_instance, created_quality = TestRequestQuality.objects.get_or_create(test_request=tvf)
-    shipping_instance, created_shipping = TestRequestShipping.objects.get_or_create(test_request=tvf)
-
-    # Determine if the current user has permission to edit this TVF
-    can_edit = False
-    
-    # Initiator can edit drafts
-    if request.user == tvf.tvf_initiator and tvf.status.name == 'Draft':
-        can_edit = True
-    # NPI users can always edit TVFs in their workflow (including rejected ones for NPI)
-    elif is_npi_user(request.user) and tvf.current_phase.name in ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'REWORK_AT_PROD']:
-        can_edit = True
-    # Project Managers can edit if rejected back to PM and they initiated it
-    elif is_project_manager(request.user) and tvf.current_phase.name == 'REWORK_AT_PM' and request.user == tvf.tvf_initiator:
-        can_edit = True
-    # Quality users can edit if rejected back to QA
-    elif is_quality_user(request.user) and tvf.current_phase.name == 'REWORK_AT_QA':
-        can_edit = True
-    # Logistics users can edit if rejected back to Logistics
-    elif is_logistics_user(request.user) and tvf.current_phase.name == 'REWORK_AT_LOGISTICS':
-        can_edit = True
-    # Coaches and Superusers always have edit access
-    elif is_coach(request.user) or request.user.is_superuser:
-        can_edit = True
-
-    if not can_edit:
-        messages.error(request, f"You do not have permission to edit TVF {tvf.tvf_number} at its current stage ({tvf.status.name}, {tvf.current_phase.name}).")
-        return redirect('test_requests:coach_dashboard') # Or detail view of the TVF
+    quality_instance, created_quality = TestRequestQuality.objects.get_or_create(test_request=test_request)
+    shipping_instance, created_shipping = TestRequestShipping.objects.get_or_create(test_request=test_request)
 
     if request.method == 'POST':
-        form = TestRequestForm(request.POST, instance=tvf) # Use tvf instead of test_request
-        plastic_formset = PlasticCodeFormSet(request.POST, instance=tvf, prefix='plastic_codes')
-        input_file_formset = InputFileFormSet(request.POST, instance=tvf, prefix='input_files')
+        form = TestRequestForm(request.POST, instance=test_request)
+        plastic_formset = PlasticCodeFormSet(request.POST, instance=test_request, prefix='plastic_codes')
+        input_file_formset = InputFileFormSet(request.POST, instance=test_request, prefix='input_files')
         shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
         quality_form = TestRequestQualityForm(request.POST, instance=quality_instance, prefix='quality')
 
@@ -933,7 +762,7 @@ def test_request_update_view(request, pk):
         if is_valid:
             try:
                 with transaction.atomic():
-                    tvf_saved = form.save() # Use tvf_saved
+                    test_request_saved = form.save()
 
                     for p_form in plastic_formset.forms:
                         if p_form.instance.pk: 
@@ -949,25 +778,23 @@ def test_request_update_view(request, pk):
                             elif manual_plastic_code:
                                 p_form.instance.manual_plastic_code = manual_plastic_code
                                 p_form.instance.plastic_code_lookup = None
-                            p_form.instance.test_request = tvf_saved
+                            p_form.instance.test_request = test_request_saved
                             p_form.save()
 
-                    # Use tvf_saved for the instance, and corrected formset variable name
                     saved_input_files = input_file_formset.save(commit=False)
-                    for i, input_file in enumerate(saved_input_files): # Corrected from saved_input_file_formset.forms
+                    for i, input_file in enumerate(saved_input_file_formset.forms):
                         if input_file.cleaned_data.get('DELETE'):
                             if input_file.instance.pk:
                                 input_file.instance.delete()
                             continue
                         
-                        # Check if the form has actual data or changes to save, otherwise, it might create empty records
                         if input_file.has_changed() or (not input_file.instance.pk and any(input_file.cleaned_data.values())):
                             input_file_instance = input_file.save(commit=False)
-                            input_file_instance.test_request = tvf_saved
+                            input_file_instance.test_request = test_request_saved
                             input_file_instance.save()
 
-                            if i < len(pans_formsets):
-                                pan_fs_to_save = pans_formsets[i]
+                            if i < len(pans_formsets): # Corrected from processed_pans_formsets
+                                pan_fs_to_save = pans_formsets[i] # Corrected from processed_pans_formsets
                                 for pan_form_instance in pan_fs_to_save.forms:
                                     if pan_form_instance.cleaned_data.get('DELETE'):
                                         if pan_form_instance.instance.pk:
@@ -981,32 +808,25 @@ def test_request_update_view(request, pk):
                     shipping_form.save()
                     quality_form.save()
 
-                messages.success(request, f"Test Request {tvf_saved.tvf_number} updated successfully!")
-                return redirect('test_requests:detail', pk=tvf_saved.pk)
+                messages.success(request, f"Test Request {test_request.tvf_number} updated successfully!")
+                return redirect('test_requests:detail', pk=test_request.pk)
             except Exception as e:
                 messages.error(request, f"Error updating Test Request: {e}")
                 import traceback
                 traceback.print_exc()
         else:
             messages.error(request, "Please correct the errors below.")
-            # Re-instantiate formsets with POST data if validation fails, to show errors
-            plastic_formset = PlasticCodeFormSet(request.POST, instance=tvf, prefix='plastic_codes')
-            input_file_formset = InputFileFormSet(request.POST, instance=tvf, prefix='input_files')
-            shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
-            quality_form = TestRequestQualityForm(request.POST, instance=quality_instance, prefix='quality')
-
             pans_formsets = []
-            for i, input_file_form_revalidate in enumerate(input_file_formset.forms):
+            for i, input_file_form in enumerate(input_file_formset.forms):
                 prefix = f'input_files-{i}-pans'
-                instance_for_pan = input_file_form_revalidate.instance if input_file_form_revalidate.instance.pk else None
-                pan_formset = PanInlineFormSet(request.POST, instance=instance_for_pan, prefix=prefix)
+                instance = input_file_form.instance if input_file_form.instance.pk else None
+                pan_formset = PanInlineFormSet(request.POST, instance=instance, prefix=prefix)
                 pans_formsets.append(pan_formset)
 
-
     else:
-        form = TestRequestForm(instance=tvf)
-        plastic_formset = PlasticCodeFormSet(instance=tvf, prefix='plastic_codes')
-        input_file_formset = InputFileFormSet(instance=tvf, prefix='input_files')
+        form = TestRequestForm(instance=test_request)
+        plastic_formset = PlasticCodeFormSet(instance=test_request, prefix='plastic_codes')
+        input_file_formset = InputFileFormSet(instance=test_request, prefix='input_files')
         shipping_form = TestRequestShippingForm(instance=shipping_instance, prefix='shipping')
         quality_form = TestRequestQualityForm(instance=quality_instance, prefix='quality')
 
@@ -1027,7 +847,7 @@ def test_request_update_view(request, pk):
         'pans_formsets': pans_formsets,
         'quality_form': quality_form,
         'shipping_form': shipping_form,
-        'test_request': tvf, # Pass tvf object to template
+        'test_request': test_request,
     }
     return render(request, 'test_requests/test_request_form.html', context)
 
