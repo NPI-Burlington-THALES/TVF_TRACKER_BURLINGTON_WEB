@@ -606,7 +606,7 @@ def npi_update_tvf_view(request, tvf_id):
 
         elif action == 'back_to_released': # New action: Back to Released
             if tvf.current_phase.name in ['TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI'] or tvf.current_phase.name == 'REWORK_AT_PROD':
-                tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED') # Revert status to submitted
+                tvf.status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED') # Revert status
                 tvf.current_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
                 tvf.comments = comments
                 tvf.is_rejected = False # Clear rejected status
@@ -891,7 +891,7 @@ def test_request_update_view(request, pk):
     if request.user == tvf.tvf_initiator and tvf.status.name == 'Draft':
         can_edit = True
     # NPI users can always edit TVFs in their workflow (including rejected ones for NPI)
-    elif is_npi_user(request.user) and tvf.current_phase.name in ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'REWORK_AT_PROD']:
+    elif is_npi_user(request.user) and tvf.current_phase.name in ['TVF_RELEASED', 'TVF_DP_DONE', 'TVF_PROCESSED_AT_NPI', 'REWORK_AT_NPI',]:
         can_edit = True
     # Project Managers can edit if rejected back to PM and they initiated it
     elif is_project_manager(request.user) and tvf.current_phase.name == 'REWORK_AT_PM' and request.user == tvf.tvf_initiator:
@@ -911,63 +911,81 @@ def test_request_update_view(request, pk):
         return redirect('test_requests:coach_dashboard') # Or detail view of the TVF
 
     if request.method == 'POST':
-        form = TestRequestForm(request.POST, instance=tvf) # Use tvf instead of test_request
+        form = TestRequestForm(request.POST, instance=tvf)
         plastic_formset = PlasticCodeFormSet(request.POST, instance=tvf, prefix='plastic_codes')
         input_file_formset = InputFileFormSet(request.POST, instance=tvf, prefix='input_files')
         shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
         quality_form = TestRequestQualityForm(request.POST, instance=quality_instance, prefix='quality')
 
+        # First, validate all primary forms/formsets
+        main_forms_valid = (form.is_valid() and
+                            plastic_formset.is_valid() and
+                            input_file_formset.is_valid() and
+                            shipping_form.is_valid() and
+                            quality_form.is_valid())
 
         pans_formsets = []
-        for i, input_file_form in enumerate(input_file_formset.forms):
-            if not input_file_form.cleaned_data.get('DELETE', False):
+        all_pan_formsets_valid = True
+
+        # Now, handle PAN formsets based on the validity of input_file_formset
+        if main_forms_valid:
+            for i, input_file_form_validated in enumerate(input_file_formset.forms):
+                if not input_file_form_validated.cleaned_data.get('DELETE', False):
+                    prefix = f'input_files-{i}-pans'
+                    pan_fs = PanInlineFormSet(request.POST, instance=input_file_form_validated.instance, prefix=prefix)
+                    if not pan_fs.is_valid():
+                        all_pan_formsets_valid = False
+                    pans_formsets.append(pan_fs)
+                else:
+                    prefix = f'input_files-{i}-pans'
+                    pans_formsets.append(PanInlineFormSet(prefix=prefix)) # Append empty formset for deleted files
+        else:
+            # If main forms are not valid, re-instantiate PAN formsets with POST data for error display
+            for i, input_file_form_unvalidated in enumerate(input_file_formset.forms):
                 prefix = f'input_files-{i}-pans'
-                pan_formset = PanInlineFormSet(request.POST, instance=input_file_form.instance, prefix=prefix)
-                pans_formsets.append(pan_formset)
+                instance_for_pan = input_file_form_unvalidated.instance if input_file_form_unvalidated.instance and input_file_form_unvalidated.instance.pk else None
+                pan_fs_with_data = PanInlineFormSet(request.POST, instance=instance_for_pan, prefix=prefix)
+                pans_formsets.append(pan_fs_with_data)
+            all_pan_formsets_valid = False # Assume false if primary forms are invalid for overall check
 
-        is_valid = form.is_valid() and plastic_formset.is_valid() and input_file_formset.is_valid() \
-                   and shipping_form.is_valid() and quality_form.is_valid()
-        for pan_fs in pans_formsets:
-            is_valid = is_valid and pan_fs.is_valid()
+        is_overall_valid = main_forms_valid and all_pan_formsets_valid
 
-        if is_valid:
+        if is_overall_valid:
             try:
                 with transaction.atomic():
-                    tvf_saved = form.save() # Use tvf_saved
+                    tvf_saved = form.save(commit=False)
 
-                    for p_form in plastic_formset.forms:
-                        if p_form.instance.pk: 
-                            if p_form.cleaned_data.get('DELETE'): 
-                                p_form.instance.delete()
-                                continue
-                        if p_form.has_changed():
-                            plastic_code_lookup = p_form.cleaned_data.get('plastic_code_lookup')
-                            manual_plastic_code = p_form.cleaned_data.get('manual_plastic_code')
-                            if plastic_code_lookup:
-                                p_form.instance.plastic_code_lookup = plastic_code_lookup
-                                p_form.instance.manual_plastic_code = None
-                            elif manual_plastic_code:
-                                p_form.instance.manual_plastic_code = manual_plastic_code
-                                p_form.instance.plastic_code_lookup = None
-                            p_form.instance.test_request = tvf_saved
-                            p_form.save()
+                    action = request.POST.get('action')
+                    if action == 'submit' and tvf_saved.status.name == 'Rejected to PM' and tvf_saved.tvf_initiator == request.user:
+                        # If a PM is submitting a TVF rejected to them, change status back to submitted
+                        new_status, _ = TVFStatus.objects.get_or_create(name='TVF_SUBMITTED')
+                        new_phase, _ = TestRequestPhaseDefinition.objects.get_or_create(name='TVF_RELEASED', defaults={'order': 2})
+                        tvf_saved.status = new_status
+                        tvf_saved.current_phase = new_phase
+                        tvf_saved.is_rejected = False # Clear rejected flag upon successful resubmission
+                        messages.success(request, f"TVF {tvf_saved.tvf_number} updated and re-submitted to NPI!")
+                    else:
+                        messages.info(request, f"TVF {tvf_saved.tvf_number} updated successfully!")
 
-                    # Use tvf_saved for the instance, and corrected formset variable name
-                    saved_input_files = input_file_formset.save(commit=False)
-                    for i, input_file in enumerate(saved_input_files): # Corrected from saved_input_file_formset.forms
-                        if input_file.cleaned_data.get('DELETE'):
-                            if input_file.instance.pk:
-                                input_file.instance.delete()
+                    tvf_saved.save()
+
+                    plastic_formset.instance = tvf_saved
+                    plastic_formset.save()
+
+                    # Save input files and their PANs
+                    for i, input_file_form in enumerate(input_file_formset.forms): # Iterate over forms (now validated if is_overall_valid is true)
+                        if input_file_form.cleaned_data.get('DELETE'):
+                            if input_file_form.instance.pk:
+                                input_file_form.instance.delete()
                             continue
                         
-                        # Check if the form has actual data or changes to save, otherwise, it might create empty records
-                        if input_file.has_changed() or (not input_file.instance.pk and any(input_file.cleaned_data.values())):
-                            input_file_instance = input_file.save(commit=False)
+                        if input_file_form.has_changed() or (not input_file_form.instance.pk and any(input_file_form.cleaned_data.values())):
+                            input_file_instance = input_file_form.save(commit=False)
                             input_file_instance.test_request = tvf_saved
                             input_file_instance.save()
 
                             if i < len(pans_formsets):
-                                pan_fs_to_save = pans_formsets[i]
+                                pan_fs_to_save = pans_formsets[i] # This pan_fs_to_save is already validated
                                 for pan_form_instance in pan_fs_to_save.forms:
                                     if pan_form_instance.cleaned_data.get('DELETE'):
                                         if pan_form_instance.instance.pk:
@@ -980,8 +998,7 @@ def test_request_update_view(request, pk):
 
                     shipping_form.save()
                     quality_form.save()
-
-                messages.success(request, f"Test Request {tvf_saved.tvf_number} updated successfully!")
+                
                 return redirect('test_requests:detail', pk=tvf_saved.pk)
             except Exception as e:
                 messages.error(request, f"Error updating Test Request: {e}")
@@ -989,21 +1006,10 @@ def test_request_update_view(request, pk):
                 traceback.print_exc()
         else:
             messages.error(request, "Please correct the errors below.")
-            # Re-instantiate formsets with POST data if validation fails, to show errors
-            plastic_formset = PlasticCodeFormSet(request.POST, instance=tvf, prefix='plastic_codes')
-            input_file_formset = InputFileFormSet(request.POST, instance=tvf, prefix='input_files')
-            shipping_form = TestRequestShippingForm(request.POST, instance=shipping_instance, prefix='shipping')
-            quality_form = TestRequestQualityForm(request.POST, instance=quality_instance, prefix='quality')
+            # Formsets are already re-instantiated with POST data and errors if not valid
+            # so no need to repeat them here.
 
-            pans_formsets = []
-            for i, input_file_form_revalidate in enumerate(input_file_formset.forms):
-                prefix = f'input_files-{i}-pans'
-                instance_for_pan = input_file_form_revalidate.instance if input_file_form_revalidate.instance.pk else None
-                pan_formset = PanInlineFormSet(request.POST, instance=instance_for_pan, prefix=prefix)
-                pans_formsets.append(pan_formset)
-
-
-    else:
+    else: # GET request
         form = TestRequestForm(instance=tvf)
         plastic_formset = PlasticCodeFormSet(instance=tvf, prefix='plastic_codes')
         input_file_formset = InputFileFormSet(instance=tvf, prefix='input_files')
@@ -1040,7 +1046,6 @@ def test_request_pdf_view(request, pk):
         'plastic_codes_entries__plastic_code_lookup',
         'input_files_entries__pans',
         'quality_details__quality_sign_off_by',
-        'shipping_details__dispatch_method',
         'shipping_details__shipping_sign_off_by'
     ), pk=pk)
 
