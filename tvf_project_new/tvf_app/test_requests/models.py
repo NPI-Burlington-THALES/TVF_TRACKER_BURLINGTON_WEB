@@ -347,6 +347,7 @@ class TestRequestShipping(models.Model):
     ship_to_state_province = models.CharField(max_length=255, blank=True, null=True, help_text="State/Province")
     ship_to_postal_code = models.CharField(max_length=20, blank=True, null=True, help_text="Postal Code")
     ship_to_country = models.CharField(max_length=255, blank=True, null=True, help_text="Country")
+    # Removed tracking_number field
     tracking_number = models.CharField(max_length=255, blank=True, null=True, help_text="Tracking number for the shipment") # <--- ADDED THIS LINE
     
     class Meta:
